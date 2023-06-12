@@ -1,0 +1,19 @@
+# Changes here will be overwritten by Copier
+_commit: 0.4.0
+_src_path: https://github.com/pdm-project/copier-pdm.git
+author_email: abondarenko101@gmail.com
+author_fullname: Alex Bondarenko
+author_username: abondrn
+build_doc: true
+copyright_date: '2023'
+copyright_holder: Alex Bondarenko
+copyright_holder_email: abondarenko101@gmail.com
+copyright_license: MPL-2.0
+project_description: batteries-included LLM framework to jumpstart your next project
+project_name: lemmata
+python_package_distribution_name: lemmata
+python_package_import_name: lemmata
+python_package_requires_python: '>=3.9'
+repository_name: lemmata
+repository_namespace: abondrn
+
