@@ -1,6 +1,7 @@
 from typing import Optional, Dict, List, Any, Union, Tuple, Literal
 import logging
 import time
+from inspect import getmembers, isclass
 
 from langchain.chat_models import ChatOpenAI
 from langchain.callbacks.streaming_stdout_final_only import FinalStreamingStdOutCallbackHandler
@@ -15,9 +16,11 @@ from langchain.schema import (
 )
 from langchain.chains import ConversationChain
 from gradio import Request
+from langchain.experimental.plan_and_execute import PlanAndExecute, load_agent_executor, load_chat_planner
+import gradio_tools
 
 from lemmata.tools import tools
-from lemmata.cli import Config
+from lemmata.config import Config
 
 
 logger = logging.getLogger()
@@ -105,6 +108,12 @@ class CustomCallback(BaseCallbackHandler):
         return False
 
 
+def show(*values):
+    """For debugging purposes"""
+    print(*values[:-1])
+    return values[-1]()
+
+
 class ChatSession:
     history: list[Tuple[str, str]]
     feedback: list[dict]
@@ -127,6 +136,12 @@ class ChatSession:
         temperature: Optional[float] = None,
         top_p: Optional[float] = None,
     ) -> ConversationChain:
+        for field in ("manual", "cache", "personality", "response_limit"):
+            if getattr(self.config, field):
+                raise NotImplementedError(field)
+        if model in ("claude-v1", "claude-instant-v1"):
+            raise NotImplementedError(model)
+
         callbacks = [CustomCallback()]
         llm = ChatOpenAI(
             callbacks=[FinalStreamingStdOutCallbackHandler()],
@@ -137,28 +152,38 @@ class ChatSession:
                 "top_p": top_p or self.config.top_p,
             },
         )
-        memory = ConversationTokenBufferMemory(
-            llm=llm,
-            max_token_limit=memory_limit or self.config.memory_limit,
-            memory_key="chat_history",
-        )
-        return initialize_agent(
+        all_tools = (
             tools
             + load_tools(
                 self.config.tools,
                 llm=llm,
                 callbacks=callbacks,
-            ),
-            llm,
-            agent=AgentType.STRUCTURED_CHAT_ZERO_SHOT_REACT_DESCRIPTION,
-            memory=memory,
-            callbacks=callbacks,
-            verbose=self.config.verbose,
-            agent_executor_kwargs={
-                "max_execution_time": None,
-                "max_iterations": 15,
-            },
+            )
+            + [t[1]().langchain for t in getmembers(gradio_tools, isclass) if t[0] not in ("GradioTool", "ImageCaptioningTool")]
         )
+        if self.config.agent == "structured-react":
+            memory = ConversationTokenBufferMemory(
+                llm=llm,
+                max_token_limit=memory_limit or self.config.memory_limit,
+                memory_key="chat_history",
+            )
+            return initialize_agent(
+                all_tools,
+                llm,
+                agent=AgentType.STRUCTURED_CHAT_ZERO_SHOT_REACT_DESCRIPTION,
+                memory=memory,
+                callbacks=callbacks,
+                verbose=self.config.verbose,
+                handle_parsing_errors=True,
+                agent_executor_kwargs={
+                    "max_execution_time": None,
+                    "max_iterations": 15,
+                },
+            )
+        else:
+            planner = load_chat_planner(model)
+            executor = load_agent_executor(model, all_tools, verbose=self.config.verbose)
+            return PlanAndExecute(planner=planner, executor=executor, verbose=self.config.verbose)
 
     def vote_last_response(self, vote_type: Literal["upvote", "downvote"], request: Optional[Request] = None) -> dict:
         feedback = {

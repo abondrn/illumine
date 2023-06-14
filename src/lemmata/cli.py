@@ -1,14 +1,14 @@
 import argparse
 import os
 import sys
-from typing import Optional, get_origin, Literal, get_args
+from typing import get_origin, Literal, get_args, Tuple, Union, Any
 
-import pydantic
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import ValidationError
 import yaml
 from langchain.callbacks import get_openai_callback
 
 from lemmata import gradio, chain
+from lemmata.config import Config, BaseConfig, description
 
 
 def get_stdin():
@@ -23,22 +23,22 @@ def get_stdin():
                 yield line.decode("utf-8")
 
 
-def description(field: pydantic.fields.ModelField) -> str:
-    """Standardises argument description.
-
-    Args:
-        field (pydantic.fields.ModelField): Field to construct description for.
-
-    Returns:
-        str: Standardised description of the argument.
-    """
-    # Construct Default String
-    default = f"(default: {field.get_default()})" if not field.required and field.get_default() is not None else None
-
-    # Return Standardised Description String
-    return " ".join(filter(None, [field.field_info.description, default]))
+def metavar(type_: type, default: str = "ARG") -> Union[str, Tuple[str, ...]]:
+    if get_origin(type_) is tuple:
+        return tuple([metavar(t, default) for t in get_args(type_)])  # type: ignore[misc]
+    elif get_origin(type_) is Literal:
+        return "{" + ",".join(get_args(type_)) + "}"
+    elif get_origin(type_) is list:
+        return f"[{metavar(get_args(type_)[0], default)} ...]"
+    else:
+        return {
+            int: "INT",
+            float: "FLOAT",
+        }.get(type_, default)
 
 
+# TODO https://stackoverflow.com/questions/27146262/create-variable-key-value-pairs-with-argparse-python
+# TODO singularize metavar
 def generate_argparser(dataclass):
     parser = argparse.ArgumentParser()
 
@@ -56,9 +56,15 @@ def generate_argparser(dataclass):
             else:
                 kwargs["action"] = "store_true"
         elif get_origin(field.annotation) is list:
-            kwargs["action"] = argparse._StoreAction
-            kwargs["nargs"] = argparse.ZERO_OR_MORE
-            kwargs["default"] = ()
+            kwargs["default"] = []
+            item_type = get_args(field.annotation)[0]
+            if get_origin(item_type) is tuple:
+                kwargs["nargs"] = 2
+                kwargs["action"] = argparse._AppendAction
+            else:
+                kwargs["nargs"] = argparse.ZERO_OR_MORE
+                kwargs["action"] = argparse._StoreAction
+            kwargs["metavar"] = metavar(item_type)
         elif get_origin(field.annotation) is Literal:
             kwargs["choices"] = get_args(field.annotation)
         elif "action" in extra:
@@ -67,22 +73,25 @@ def generate_argparser(dataclass):
                 kwargs["default"] = 0
             else:
                 print(field.field_info)
+        elif issubclass(field.type_, os.PathLike):
+            kwargs["type"] = str
+            kwargs["metavar"] = "FILE"
         else:
-            kwargs["type"] = field.type_
             if field.type_ not in (str, int, float):
-                print(field.type_, field.field_info)
+                raise TypeError((field.type_, field.field_info))
+            kwargs["type"] = field.type_
+            kwargs["metavar"] = metavar(field.type_, field.alias.upper())
 
         if "env" in extra:
             kwargs["env_var"] = field_name.upper() if extra["env"] is True else extra["env"]
 
-        if kwargs.get("action") not in ("store_false", "store_true", "count"):
-            kwargs["metavar"] = field.alias.upper()
         kwargs["help"] = description(field)
 
         default = getattr(field, "default", None)
         if default is not None:
             kwargs["default"] = default
 
+        kebab_case = field_name.replace("_", "-")
         # Check if single-letter abbreviation is defined
         if "arg" in extra:
             parser.add_argument(field_name, nargs="?" if not field.required else 1, **kwargs)
@@ -90,65 +99,51 @@ def generate_argparser(dataclass):
             abbr = extra["letter"]
             if abbr is True:
                 abbr = field_name[0]
-            parser.add_argument(f"-{abbr}", f"--{field_name}", **kwargs)
+            parser.add_argument(f"-{abbr}", f"--{kebab_case}", **kwargs)
         else:
-            parser.add_argument(f"--{field_name}", **kwargs)
+            parser.add_argument(f"--{kebab_case}", **kwargs)
 
     return parser
 
 
-class Config(BaseModel):
-    prompt: Optional[str] = Field(arg=0)
-    manual: bool = Field(description="Human in the Loop mode", letter="m")
-    verbose: int = Field(default=0, action="count", letter="v")
-    log: Optional[str] = Field(letter="l", description="Where to store the logs")
-    cache: bool = Field(description="Whether to cache the responses of the LLM")
-    temperature: float = Field(letter="t", default=0)
-    model: Literal["gpt-3.5-turbo", "gpt-4", "claude-v1", "claude-instant-v1"] = Field(default="gpt-3.5-turbo")
-    openai_api_key: Optional[str] = Field(letter="k")
-    anthropic_api_key: Optional[str]
-    cost_limit: Optional[float] = Field(description="The maximum allowable cost before aborting the chain")
-    response_limit: Optional[int] = Field(description="Number of tokens to limit the response to")
-    memory_limit: Optional[int] = Field(description="Number of tokens to limit history context to")
-    tools: list[str] = Field(description="Names of tools to enable")
-    config: Optional[str] = Field(letter="c", description="Configuration file")
-    interactive: bool = Field(letter="i", description="Spawns an interactive session")
-    visualize: bool = Field(description="Requires langchain-visualizer", letter="z")
-    gradio: bool = Field(description="Requires gradio", letter="g")
-
-    host: str = Field(default="0.0.0.0")
-    debug: bool = Field(letter="d")
-    port: Optional[int]
-
-    class Config:
-        arbitrary_types_allowed = True
-
-
-argparser = generate_argparser(Config)
+# prog - The name of the program (default: os.path.basename(sys.argv[0]))
+# TODO description - Text to display before the argument help (by default, no text)
+# epilog - Text to display after the argument help (by default, no text)
+# TODO parents - A list of ArgumentParser objects whose arguments should also be included
+# formatter_class - A class for customizing the help output
+# conflict_handler - The strategy for resolving conflicting optionals (usually unnecessary)
+# allow_abbrev - Allows long options to be abbreviated if the abbreviation is unambiguous. (default: True)
+def parse_args(cls: BaseConfig, *args: Any, **kwargs: Any) -> BaseConfig:
+    argparser = generate_argparser(cls)
+    args = argparser.parse_args(*args, **kwargs)
+    if args.config:
+        with open(args.config) as f:
+            config_file = yaml.safe_load(f)
+        kwargs = config_file
+    else:
+        kwargs = {}
+    for k, v in vars(args).items():
+        if type(v) is dict and get_origin(cls.__fields__[k].annotation) is list:
+            kwargs[k] = v.items()
+        elif v is not None:
+            kwargs[k] = v
+    try:
+        return cls(**kwargs)
+    except ValidationError as e:
+        for error in e.errors():
+            print(error)
+        print(e.json())
+        raise e
 
 
 def main():
-    args = argparser.parse_args()
-    with open(args.config) as f:
-        config_file = yaml.safe_load(f)
-    kwargs = config_file
-    for k, v in vars(args).items():
-        if v is not None:
-            kwargs[k] = v
-    try:
-        config = Config(**kwargs)
-    except ValidationError as e:
-        for error in e.errors():
-            print(error.json())
-        print(e.json())
-        return
-
+    config = parse_args(Config)
     chat = chain.ChatSession(config)
 
     if config.gradio:
         ui = gradio.build_gradio(chat)
         try:
-            ui.launch(server_name=args.host, debug=args.debug, server_port=args.port, share=False)
+            ui.launch(server_name=config.host, debug=config.debug, server_port=config.port, share=False)
         except KeyboardInterrupt:
             ui.close()
         except Exception as e:
@@ -170,6 +165,7 @@ def main():
                     print(e)
                     print(cb)
     else:
+        agent_chain = chat.get_agent_chain()
         agent_chain(get_stdin() + config.prompt)
 
 

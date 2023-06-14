@@ -12,17 +12,11 @@ license = {text = "MPL-2.0"}
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
-    "llama-index>=0.6.23",
     "langchain>=0.0.198",
     "langchain-visualizer>=0.0.25",
     "openai>=0.27.8",
-    "duckduckgo-search>=3.8.3",
-    "arxiv>=1.4.7",
-    "wikipedia>=1.4.0",
     "tiktoken>=0.4.0",
     "regex-llm>=0.1.0",
-    "rich>=13.4.1",
-    "halo>=0.0.31",
     "docarray>=0.33.0",
 ]
 dynamic = ["version"]
@@ -37,8 +31,19 @@ Repository = "https://github.com/abondrn/lemmata"
 Homepage = "https://github.com/abondrn/lemmata"
 
 [project.optional-dependencies]
-gradio = [
+ui = [
     "gradio",
+    "rich>=13.4.1",
+    "halo>=0.0.31",
+]
+tools = [
+    "llama-index>=0.6.23",
+    "duckduckgo-search>=3.8.3",
+    "arxiv>=1.4.7",
+    "wikipedia>=1.4.0",
+    "gradio-tools>=0.0.9",
+    "snscrape",
+    "platypush>=0.24.4",
 ]
 [tool.pdm.version]
 source = "scm"
