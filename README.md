@@ -7,27 +7,40 @@
 
 opinionated, batteries-included LLM framework to jumpstart your next project
 
- - deployment 
+ - deployment
    - [x] CLI entrypoint
    - [ ] publish to PIP
    - [ ] API
    - [ ] Discord
-   - [ ] chat UI
+   - gradio chat UI
+     - [ ] support reload
+     - [ ] enable model comparisons
    - [ ] rich CLI exceptions and UI
  - traces
    - [x] langchain visualizer
    - [ ] persistence and replay
    - [ ] caching
    - [ ] RLHF
- - [ ] YAML+jinja+regex DSL
+ - XML DSL
+   - [ ] jinja syntactic sugar
+   - [ ] regex generation
+   - [ ] macros
+   - [ ] guidance primitives
+   - [ ] imports
+   - [ ] guardrails
  - [ ] FSM agent visualization
- - [ ] setup memory using transformers and faiss
+ - memory
+   - [ ] setup memory using transformers and faiss
+   - [ ] goal tree persistance
  - tools
-   - [ ] Brave Search API
+   - [X] Brave Search API
    - [ ] OpenStreetMap
    - [ ] Python docstring search
    - [ ] CLI invocation
    - [ ] llama-index
+   - [ ] modifying files with diffs
+   - [ ] confirmation
+   - [ ] stream cursors
 
 ## Requirements
 

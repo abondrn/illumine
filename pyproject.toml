@@ -36,6 +36,10 @@ classifiers = [
 Repository = "https://github.com/abondrn/lemmata"
 Homepage = "https://github.com/abondrn/lemmata"
 
+[project.optional-dependencies]
+gradio = [
+    "gradio",
+]
 [tool.pdm.version]
 source = "scm"
 
@@ -59,17 +63,19 @@ doc = [
 
 [tool.pdm.scripts]
 lemmata = { call = "src.lemmata.cli:main" }
+gradio = "gradio src/lemmata/cli.py"
 release = "python -m tasks.release"
 test = "pytest tests/"
 doc = {shell = "cd docs && mkdocs serve", help = "Start the dev server for doc preview"}
 lint = "pre-commit run --all-files"
+install = {shell = "pdm install && pre-commit install"}
 
 [tool.black]
-line-length = 100
+line-length = 130
 target-version = ["py37", "py38", "py39", "py310"]
 
 [tool.ruff]
-line-length = 100
+line-length = 130
 select = [
   "B",    # flake8-bugbear
   "C4",   # flake8-comprehensions
@@ -95,11 +101,13 @@ known-first-party = ["lemmata"]
 follow_imports = "silent"
 ignore_missing_imports = true
 disallow_incomplete_defs = true
-disallow_untyped_defs = true
-disallow_untyped_decorators = true
 namespace_packages = true
 mypy_path = "src"
 explicit_package_bases = true
+disable_error_code = "no-redef,import,var-annotated"
+warn_unused_ignores = true
+warn_no_return = true
+allow_redefinition = true
 
 [tool.towncrier]
 package = "lemmata"
