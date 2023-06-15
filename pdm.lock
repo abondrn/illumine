@@ -878,6 +878,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "pathspec"
+version = "0.11.1"
+requires_python = ">=3.7"
+summary = "Utility library for gitignore style pattern matching of file paths."
+
+[[package]]
 name = "pillow"
 version = "9.5.0"
 requires_python = ">=3.7"
@@ -1497,7 +1503,7 @@ summary = "Backport of pathlib-compatible object wrapper for zip files"
 lock_version = "4.2"
 cross_platform = true
 groups = ["default", "dev", "doc", "test", "tools"]
-content_hash = "sha256:d9089752c02878c31c623ec6da1723dbfdc5c8f63ff459e940fe83a6a9a4f284"
+content_hash = "sha256:bae03d05cc42d0d5e2d6ba2295884955cdedc7895c98af1743e27c513972b966"
 
 [metadata.files]
 "aiofiles 23.1.0" = [
@@ -2990,6 +2996,10 @@ content_hash = "sha256:d9089752c02878c31c623ec6da1723dbfdc5c8f63ff459e940fe83a6a
 "parver 0.4" = [
     {url = "https://files.pythonhosted.org/packages/ce/a5/0a2f93e7bb5ab3c35b37c991885264864c5803f4da830cf519c663991d78/parver-0.4.tar.gz", hash = "sha256:d4a3dbb93c53373ee9a0ba055e4858c44169b204b912e49d003ead95db9a9bca"},
     {url = "https://files.pythonhosted.org/packages/dd/62/4e57467a2690df92c61bbf0afbb32a1f8763e34f7bf6c1577c6b80b98ebd/parver-0.4-py3-none-any.whl", hash = "sha256:c66d3347a4858643875ef959d8ba7a269d5964bfb690b0dd998b8f39da930be2"},
+]
+"pathspec 0.11.1" = [
+    {url = "https://files.pythonhosted.org/packages/95/60/d93628975242cc515ab2b8f5b2fc831d8be2eff32f5a1be4776d49305d13/pathspec-0.11.1.tar.gz", hash = "sha256:2798de800fa92780e33acca925945e9a19a133b715067cf165b8866c15a31687"},
+    {url = "https://files.pythonhosted.org/packages/be/c8/551a803a6ebb174ec1c124e68b449b98a0961f0b737def601e3c1fbb4cfd/pathspec-0.11.1-py3-none-any.whl", hash = "sha256:d8af70af76652554bd134c22b3e8a1cc46ed7d91edcdd721ef1a0c51a84a5293"},
 ]
 "pillow 9.5.0" = [
     {url = "https://files.pythonhosted.org/packages/00/d5/4903f310765e0ff2b8e91ffe55031ac6af77d982f0156061e20a4d1a8b2d/Pillow-9.5.0.tar.gz", hash = "sha256:bf548479d336726d7a0eceb6e767e179fbde37833ae42794602631a070d630f1"},

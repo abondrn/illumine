@@ -23,3 +23,5 @@ __pypackages__/
 
 .vscode/
 .idea/
+
+.pdm-python

@@ -7,6 +7,15 @@
 
 An opinionated, batteries-included LLM framework to jumpstart your next AI project
 
+Builds tooling on top of Langchain so that creating, editing, using, and evaluating agents is as simple as possible. By extending langchain's primitives and staying modular, you are able to manage complexity while being able to swap and combine components that are most suitable for your domain.
+
+Key features
+ - Out-of-the-box CLI, Gradio web UI, and API
+ - Recording of traces with feedback for result inspection, performance monitoring, model comparison, and finetuning
+ - XML-based DSL for defining, sharing, and versioning Langchain-compatible, language-agnostic prompts
+ - Goal tree persistance for long running and collaborative agents
+ - Standardized utilities for defining large toolkits usable by agents, humans, and synthesized programs
+
 ## Requirements
 
 lemmata requires Python >=3.9
@@ -27,12 +36,13 @@ $ python -m pip install --user lemmata
 
 ## Roadmap
 
- - Features needed before next minor release marked in bold
- - Features needed before next major release underlined
+ - Features needed before next minor release **marked in bold**
+ - Features needed before next major release __underlined__
 
 Deployment
    - [x] CLI entrypoint
    - [ ] **rich CLI exceptions and UI**
+   - Docker container
    - gradio chat UI
      - [ ] **support ICE visualizer**
      - [ ] **regeneration, remove last message**
@@ -41,26 +51,16 @@ Deployment
      - [ ] add examples
      - [ ] **show costs in real time**
      - [ ] __show which tools were invoked in real time__
-     - [ ] __reload__
      - [ ] model comparisons
      - [ ] __host on Huggingface Spaces__
      - [ ] human in the loop
      - [ ] retain memory when altering LLM parameters
    - publish package
      - [ ] **fix Github Actions failures to deploy to PIP**
+     - [ ] **setup up gitflow**
      - [ ] __add screenshot__
      - [ ] __add categories__
      - [ ] __host documentation site__
-   - [ ] API: https://github.com/jina-ai/langchain-serve/blob/main/examples/websockets/hitl/README.md
-   - __bot__
-     - [ ] https://github.com/spankybot/spanky.py
-     - [ ] https://github.com/paulpierre/RasaGPT
-     - [ ] https://github.com/botfront/rasa-for-botfront
-     - [ ] Discord: https://github.com/Haste171/langchain-chatbot
-   - [ ] assistant: https://github.com/project-alice-assistant/ProjectAlice/tree/master
-   - [ ] twitter bot?
-   - [ ] STT: https://github.com/guillaumekln/faster-whisper
-   - [ ] TTS: https://github.com/coqui-ai/TTS, https://github.com/neonbjb/tortoise-tts
    - github action
      - [ ] https://github.com/alstr/todo-to-issue-action
      - [ ] https://github.com/xpluscal/selfhealing-action-express
@@ -71,15 +71,6 @@ Traces
    - [ ] __persistence and replay__
    - RLHF
    - [ ] __API cost tracking__
- - __XML DSL__
-   - [ ] **add utility to print initial agent prompt and exit**
-   - [ ] jinja syntactic sugar
-   - [ ] regex generation
-   - [ ] macros
-   - [ ] guidance primitives
-   - [ ] imports
-   - [ ] guardrails extractor
- - [ ] FSM agent visualization
 
 Memory
    - [ ] **explicit handling of context window**
@@ -89,21 +80,7 @@ Memory
    - [ ] __https://python.langchain.com/en/latest/modules/models/llms/examples/llm_caching.html__
    - [ ] caching persistance
    - [ ] **https://python.langchain.com/en/latest/modules/agents/agents/custom_agent_with_tool_retrieval.html**
-   - llama-index
-     - [ ] https://llamahub.ai/l/papers-pubmed
-     - [ ] https://llamahub.ai/l/papers-arxiv
-     - [ ] https://llamahub.ai/l/remote_depth
-     - [ ] https://llamahub.ai/l/snscrape_twitter
-     - [ ] https://llamahub.ai/l/web-rss
-     - [ ] https://llamahub.ai/l/file-ipynb
-     - [ ] https://llamahub.ai/l/airtable
-     - [ ] caching by URL
-   - loaders
-     - [ ] __filter search results with https://python.langchain.com/en/latest/modules/prompts/example_selectors.html#__
-     - [ ] https://python.langchain.com/en/latest/modules/chains/generic/router.html
-     - [ ] https://python.langchain.com/en/latest/modules/indexes/document_loaders/examples/youtube_transcript.html
-     - [ ] https://python.langchain.com/en/latest/modules/indexes/document_loaders/examples/mediawikidump.html
-     - [ ] https://python.langchain.com/en/latest/modules/indexes/document_loaders/examples/jupyter_notebook.html
+   - [ ] __filter search results with https://python.langchain.com/en/latest/modules/prompts/example_selectors.html#__
 
 Tools
    - [X] gradio tools
@@ -128,21 +105,11 @@ Tools
      - [ ] jira
      - [ ] github issues
      - [ ] delegation
-   - __coding__
-     - [ ] modifying files with diffs
-     - [ ] https://github.com/irgolic/AutoPR
-     - [ ] https://github.com/jina-ai/dev-gpt
-     - [ ] code interpreter
-     - [ ] Python docstring search
-     - [ ] plugin generation
-   - [ ] transformers agents
-   - [ ] OpenStreetMap
    - [ ] stream cursors (paginated APIs)
-   - [ ] __metaclass for toolkits__
- - tech debt
+
+Tech Debt
    - [X] better specification for API keys
    - [ ] **swap out argparse for a CLI parsing framework that supports environment variables and completions**
-   - [ ] **generate config file commented-out, populated with default values**
    - [ ] allow setting required arguments via prompt
    - [ ] __add streaming of final output__
    - [ ] better error messages for misspelt enum values
@@ -151,3 +118,10 @@ Tools
    - [ ] **better handling of `KeyboardInterrupt`**
    - [ ] **remove all print statements**
    - [ ] **add more precommit checks, require all unit tests pass**
+   - [ ] __add documentation for all major methods__
+   - [ ] __typecheck all major methods__
+   - [ ] **add utility to print initial agent prompt and exit**
+   - lifecycle commands
+     - [ ] **generate config file commented-out, populated with default values**
+     - hot swapping
+       - [ ] modify gradio reload to work with input arguments
