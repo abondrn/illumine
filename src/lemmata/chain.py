@@ -152,15 +152,18 @@ class ChatSession:
                 "top_p": top_p or self.config.top_p,
             },
         )
-        all_tools = (
-            tools
-            + load_tools(
-                self.config.tools,
-                llm=llm,
-                callbacks=callbacks,
-            )
-            + [t[1]().langchain for t in getmembers(gradio_tools, isclass) if t[0] not in ("GradioTool", "ImageCaptioningTool")]
+        all_tools = tools + load_tools(
+            self.config.tools,
+            llm=llm,
+            callbacks=callbacks,
         )
+        for t in getmembers(gradio_tools, isclass):
+            if t[0] not in ("GradioTool", "ImageCaptioningTool"):
+                try:
+                    # TODO get rid of printing
+                    all_tools.append(t[1]().langchain)
+                except Exception as e:
+                    print("Exception occured when loading", t[0], e)
         if self.config.agent == "structured-react":
             memory = ConversationTokenBufferMemory(
                 llm=llm,

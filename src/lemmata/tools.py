@@ -17,6 +17,24 @@ DDG_KWARGS = {"region": "us-en", "safesearch": "moderate"}
 
 ddgs = DDGS()
 
+RESULT_LIMIT = 1000
+
+
+QUERY = Field(
+    description="Be sure to use keywords that would actually be present in the documents you are searching for",
+    examples=[
+        "cats dogs",
+        '"cats and dogs"',
+        "cats -dogs",
+        "cats +dogs",
+        "cats filetype:pdf",
+        "dogs site:example.com",
+        "cats -site:example.com",
+        "intitle:dogs",
+        "inurl:cats",
+    ],
+)
+
 
 def count_tokens(string: str, encoding_name: str = "cl100k_base") -> int:
     """Returns the number of tokens in a text string."""
@@ -57,10 +75,10 @@ def drop_keys(doc, keys):
 
 
 @tool
-def ddg_search(query: str) -> Dict:
+def ddg_lookup(query: str) -> Dict:
     """
-    DuckDuckGo Search: A wrapper around DuckDuckGo Search.
-    Useful for answering knowledge-based questions. Input should be a search query.
+    Looks up entities using DuckDuckGo's Quick Answers box, which aggregates structured metadata from around the web.
+    Often returns nothing at all.
     """
     params = {"q": query, "format": "json", "region": "us-en"}
     result = prune_json(
@@ -79,25 +97,11 @@ def ddg_search(query: str) -> Dict:
 
 
 class VideoInput(BaseModel):
-    keywords: str = Field(
-        examples=[
-            "cats dogs",
-            '"cats and dogs"',
-            "cats -dogs",
-            "cats +dogs",
-            "cats filetype:pdf",
-            "dogs site:example.com",
-            "cats -site:example.com",
-            "intitle:dogs",
-            "inurl:cats",
-        ]
-    )
-    """Be sure to use keywords that would actually be present in the documents you are searching for"""
-    timelimit: Optional[Literal["d", "w", "m"]] = None
-    """Get results from the last day, week, or month"""
-    resolution: Optional[Literal["high", "standard"]] = None
-    duration: Optional[Literal["short", "medium", "long"]] = None
-    license_videos: Optional[Literal["creativeCommon", "youtube"]] = None
+    keywords: str = QUERY
+    timelimit: Optional[Literal["d", "w", "m"]] = Field(description="Get results from the last day, week, or month")
+    resolution: Optional[Literal["high", "standard"]]
+    duration: Optional[Literal["short", "medium", "long"]]
+    license_videos: Optional[Literal["creativeCommon", "youtube"]]
 
 
 @tool(args_schema=VideoInput)
@@ -114,7 +118,7 @@ def ddg_videos(
             prune_json(drop_keys(vid, ["images", "embed_html", "embed_url", "image_token", "provider"]))
             for vid in ddgs.videos(keywords, **DDG_KWARGS)
         ),
-        limit=2000,
+        limit=RESULT_LIMIT,
         stringifier=json.dumps,
         padding=2,
         offset=2,
@@ -122,10 +126,8 @@ def ddg_videos(
 
 
 class NewsInput(BaseModel):
-    keywords: str
-    """Be sure to use keywords that would actually be present in the documents you are searching for"""
-    timelimit: Optional[Literal["d", "w", "m"]] = None
-    """Get results from the last day, week, or month"""
+    keywords: str = QUERY
+    timelimit: Optional[Literal["d", "w", "m"]] = Field(description="Get results from the last day, week, or month")
 
 
 @tool(args_schema=NewsInput)
@@ -136,7 +138,7 @@ def ddg_news(
     """Search for news. Returns a list of JSON objects that you should summarize into Markdown with citations."""
     return limit_tokens(
         (drop_keys(article, ["image"]) for article in ddgs.news(keywords, **DDG_KWARGS)),
-        limit=3000,
+        limit=500,
         stringifier=json.dumps,
         padding=2,
         offset=2,
@@ -144,23 +146,22 @@ def ddg_news(
 
 
 class MapsInput(BaseModel):
-    keywords: str
-    place: Optional[str] = None
-    """if set, the other parameters are not used."""
-    street: Optional[str] = None
-    """house number/street."""
-    city: Optional[str] = None
-    county: Optional[str] = None
-    state: Optional[str] = None
-    country: Optional[str] = None
-    postalcode: Optional[str] = None
-    latitude: Optional[int] = None
-    """geographic coordinate (north-south position)"""
-    longitude: Optional[int] = None
-    """geographic coordinate (east-west position); if latitude and
-    longitude are set, the other parameters are not used."""
-    radius: Optional[int] = None
-    """expand the search square by the distance in kilometers. Defaults to 0."""
+    keywords: str = QUERY
+    place: Optional[str] = Field(description="if set, the other parameters are not used.")
+    street: Optional[str] = Field(description="house number/street.")
+    city: Optional[str]
+    county: Optional[str]
+    state: Optional[str]
+    country: Optional[str]
+    postalcode: Optional[str]
+    latitude: Optional[int] = Field(description="geographic coordinate (north-south position)")
+    longitude: Optional[int] = Field(
+        description="""
+        geographic coordinate (east-west position);
+        if latitude and longitude are set, the other parameters are not used.
+        """
+    )
+    radius: Optional[int] = Field(description="expand the search square by the distance in kilometers. Defaults to 0.")
 
 
 @tool(args_schema=MapsInput)
@@ -177,17 +178,14 @@ def ddg_maps(
     longitude: Optional[str] = None,
     radius: int = 0,
 ) -> list:
-    """Geographic search for POIs and addresses. Returns a list of JSON objects."""
-    return limit_tokens(ddgs.maps(keywords, **DDG_KWARGS), limit=3000, stringifier=json.dumps, padding=2, offset=2)
+    """Geographic search for POIs and addresses."""
+    return limit_tokens(ddgs.maps(keywords, **DDG_KWARGS), limit=RESULT_LIMIT, stringifier=json.dumps, padding=2, offset=2)
 
 
 class TranslateInput(BaseModel):
-    keywords: str
-    """string or a list of strings to translate"""
-    from_: Optional[str]
-    """translate from (defaults automatically). Defaults to None."""
-    to: Optional[str] = Field(examples=["de"])
-    """what language to translate. Defaults to "en"."""
+    keywords: str = Field(description="string or a list of strings to translate")
+    from_: Optional[str] = Field(description="translate from (defaults to autodetect)")
+    to: Optional[str] = Field(default="en", examples=["de"], description='what language to translate. Defaults to "en"')
 
 
 @tool(args_schema=TranslateInput)
@@ -207,7 +205,7 @@ def ddg_suggestions(keywords: str) -> list:
 
 
 tools = [
-    ddg_search,
+    ddg_lookup,
     ddg_videos,
     ddg_news,
     ddg_translate,

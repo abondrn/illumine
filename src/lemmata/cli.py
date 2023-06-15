@@ -71,8 +71,6 @@ def generate_argparser(dataclass):
             kwargs["action"] = extra["action"]
             if kwargs["action"] == "count":
                 kwargs["default"] = 0
-            else:
-                print(field.field_info)
         elif issubclass(field.type_, os.PathLike):
             kwargs["type"] = str
             kwargs["metavar"] = "FILE"
@@ -120,16 +118,18 @@ def parse_args(cls: BaseConfig, *args: Any, **kwargs: Any) -> BaseConfig:
         with open(args.config) as f:
             config_file = yaml.safe_load(f)
         kwargs = config_file
+        for k, v in kwargs.items():
+            if type(v) is dict and get_origin(cls.__fields__[k].annotation) is list:
+                kwargs[k] = list(v.items())
     else:
         kwargs = {}
     for k, v in vars(args).items():
-        if type(v) is dict and get_origin(cls.__fields__[k].annotation) is list:
-            kwargs[k] = v.items()
-        elif v is not None:
+        if v or v == 0:
             kwargs[k] = v
     try:
         return cls(**kwargs)
     except ValidationError as e:
+        # TODO remove print statements
         for error in e.errors():
             print(error)
         print(e.json())

@@ -5,7 +5,7 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![pdm-managed](https://img.shields.io/badge/pdm-managed-blueviolet)](https://pdm.fming.dev)
 
-opinionated, batteries-included LLM framework to jumpstart your next project
+An opinionated, batteries-included LLM framework to jumpstart your next AI project
 
 ## Requirements
 
@@ -27,28 +27,32 @@ $ python -m pip install --user lemmata
 
 ## Roadmap
 
- - deployment
+ - Features needed before next minor release marked in bold
+ - Features needed before next major release underlined
+
+Deployment
    - [x] CLI entrypoint
-   - [ ] rich CLI exceptions and UI
+   - [ ] **rich CLI exceptions and UI**
    - gradio chat UI
-     - [ ] support ICE visualizer
-     - [ ] regeneration, remove last message
-     - [ ] file upload
-     - [ ] markdown: images, tables, citations
+     - [ ] **support ICE visualizer**
+     - [ ] **regeneration, remove last message**
+     - [ ] **file upload**
+     - [ ] **markdown: images, tables, citations**
      - [ ] add examples
-     - [ ] show costs in real time
-     - [ ] show which tools were invoked in real time
-     - [ ] reload
+     - [ ] **show costs in real time**
+     - [ ] __show which tools were invoked in real time__
+     - [ ] __reload__
      - [ ] model comparisons
-     - [ ] host on Huggingface Spaces
+     - [ ] __host on Huggingface Spaces__
      - [ ] human in the loop
+     - [ ] retain memory when altering LLM parameters
    - publish package
-     - [ ] fix Github Actions failures to deploy to PIP
-     - [ ] add screenshot
-     - [ ] add categories
-     - [ ] host documentation site
+     - [ ] **fix Github Actions failures to deploy to PIP**
+     - [ ] __add screenshot__
+     - [ ] __add categories__
+     - [ ] __host documentation site__
    - [ ] API: https://github.com/jina-ai/langchain-serve/blob/main/examples/websockets/hitl/README.md
-   - bot
+   - __bot__
      - [ ] https://github.com/spankybot/spanky.py
      - [ ] https://github.com/paulpierre/RasaGPT
      - [ ] https://github.com/botfront/rasa-for-botfront
@@ -60,12 +64,15 @@ $ python -m pip install --user lemmata
    - github action
      - [ ] https://github.com/alstr/todo-to-issue-action
      - [ ] https://github.com/xpluscal/selfhealing-action-express
- - traces
+
+Traces
    - [x] langchain visualizer
-   - [ ] persistence and replay
+   - [ ] **fix Callback**
+   - [ ] __persistence and replay__
    - RLHF
-   - [ ] API cost tracking
- - XML DSL
+   - [ ] __API cost tracking__
+ - __XML DSL__
+   - [ ] **add utility to print initial agent prompt and exit**
    - [ ] jinja syntactic sugar
    - [ ] regex generation
    - [ ] macros
@@ -73,14 +80,15 @@ $ python -m pip install --user lemmata
    - [ ] imports
    - [ ] guardrails extractor
  - [ ] FSM agent visualization
- - memory
-   - [ ] personalities
-   - [ ] setup memory using transformers and faiss
-   - [ ] document upload
-   - [ ] goal tree persistance
-   - [ ] https://python.langchain.com/en/latest/modules/models/llms/examples/llm_caching.html
+
+Memory
+   - [ ] **explicit handling of context window**
+   - [ ] __personalities__
+   - [ ] **setup memory using transformers and faiss**
+   - [ ] __document upload__
+   - [ ] __https://python.langchain.com/en/latest/modules/models/llms/examples/llm_caching.html__
    - [ ] caching persistance
-   - [ ] https://python.langchain.com/en/latest/modules/agents/agents/custom_agent_with_tool_retrieval.html
+   - [ ] **https://python.langchain.com/en/latest/modules/agents/agents/custom_agent_with_tool_retrieval.html**
    - llama-index
      - [ ] https://llamahub.ai/l/papers-pubmed
      - [ ] https://llamahub.ai/l/papers-arxiv
@@ -91,34 +99,36 @@ $ python -m pip install --user lemmata
      - [ ] https://llamahub.ai/l/airtable
      - [ ] caching by URL
    - loaders
+     - [ ] __filter search results with https://python.langchain.com/en/latest/modules/prompts/example_selectors.html#__
      - [ ] https://python.langchain.com/en/latest/modules/chains/generic/router.html
      - [ ] https://python.langchain.com/en/latest/modules/indexes/document_loaders/examples/youtube_transcript.html
      - [ ] https://python.langchain.com/en/latest/modules/indexes/document_loaders/examples/mediawikidump.html
      - [ ] https://python.langchain.com/en/latest/modules/indexes/document_loaders/examples/jupyter_notebook.html
-     - [ ] https://python.langchain.com/en/latest/modules/prompts/example_selectors.html#
- - tools
+
+Tools
    - [X] gradio tools
-   - [ ] Brave Search API
+   - [ ] **Brave Search API**
    - [ ] snscrape
    - [ ] platypush
-   - [ ] [confirmation](https://python.langchain.com/en/latest/modules/agents/tools/human_approval.html)
+   - [ ] __backtrack when attempting to call the same API with the same arguments__
+   - [ ] **[confirmation](https://python.langchain.com/en/latest/modules/agents/tools/human_approval.html)**
    - chains as tools
      - [ ] https://python.langchain.com/en/latest/modules/chains/generic/from_hub.html
      - [ ] https://python.langchain.com/en/latest/modules/chains/examples/flare.html
      - [ ] https://python.langchain.com/en/latest/modules/chains/examples/llm_bash.html
      - [ ] https://python.langchain.com/en/latest/modules/chains/examples/pal.html
-   - [ ] .well-known/ai-plugin.json
+   - [ ] __.well-known/ai-plugin.json__
    - [ ] https://github.com/Significant-Gravitas/Auto-GPT-Plugins
    - [ ] https://python.langchain.com/en/latest/modules/agents/toolkits/examples/playwright.html
    - [ ] https://python.langchain.com/en/latest/modules/agents/tools/tools_as_openai_functions.html
-   - todo
+   - __todo__ goal tree persistance
      - [ ] checkvist
      - [ ] markdown checklists
      - [ ] todo comments
      - [ ] jira
      - [ ] github issues
      - [ ] delegation
-   - coding
+   - __coding__
      - [ ] modifying files with diffs
      - [ ] https://github.com/irgolic/AutoPR
      - [ ] https://github.com/jina-ai/dev-gpt
@@ -128,12 +138,16 @@ $ python -m pip install --user lemmata
    - [ ] transformers agents
    - [ ] OpenStreetMap
    - [ ] stream cursors (paginated APIs)
-   - [ ] metaclass for toolkits
+   - [ ] __metaclass for toolkits__
  - tech debt
-   - [ ] better specification for API keys
-   - [ ] environment variables
-   - [ ] generate config file commented-out, populated with default values
+   - [X] better specification for API keys
+   - [ ] **swap out argparse for a CLI parsing framework that supports environment variables and completions**
+   - [ ] **generate config file commented-out, populated with default values**
    - [ ] allow setting required arguments via prompt
-   - [ ] add streaming of final output
+   - [ ] __add streaming of final output__
    - [ ] better error messages for misspelt enum values
    - [ ] pydantic field groups
+   - [ ] https://github.com/pydantic/pydantic/discussions/4281
+   - [ ] **better handling of `KeyboardInterrupt`**
+   - [ ] **remove all print statements**
+   - [ ] **add more precommit checks, require all unit tests pass**
