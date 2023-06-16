@@ -1,119 +1,36 @@
-from typing import Optional, Dict, List, Any, Union, Tuple, Literal
+from typing import Optional, Tuple, Literal
 import logging
 import time
 from inspect import getmembers, isclass
+from tempfile import TemporaryDirectory
 
 from langchain.chat_models import ChatOpenAI
 from langchain.callbacks.streaming_stdout_final_only import FinalStreamingStdOutCallbackHandler
-from langchain.agents import load_tools, AgentType
+from langchain.agents import load_tools, AgentType, create_csv_agent
 from langchain.memory import ConversationTokenBufferMemory
-from langchain.agents import initialize_agent
-from langchain.callbacks.base import BaseCallbackHandler
-from langchain.schema import (
-    AgentAction,
-    AgentFinish,
-    LLMResult,
-)
 from langchain.chains import ConversationChain
 from gradio import Request
 from langchain.experimental.plan_and_execute import PlanAndExecute, load_agent_executor, load_chat_planner
 import gradio_tools
+from langchain.tools import BraveSearch, AIPluginTool, IFTTTWebhook
+from langchain.agents.agent_toolkits import FileManagementToolkit, NLAToolkit
+from langchain.utilities.graphql import GraphQLAPIWrapper
+from langchain.tools.graphql.tool import BaseGraphQLTool
+from langchain.chat_models.base import BaseChatModel
 
 from lemmata.tools import tools
 from lemmata.config import Config
+from lemmata.langchain.human_callback import HumanApprovalCallbackHandler
+from lemmata.langchain.initialize_agent import initialize_agent
 
 
 logger = logging.getLogger()
 
 
-class CustomCallback(BaseCallbackHandler):
-    """Base callback handler that can be used to handle callbacks from langchain."""
-
-    events: list[tuple]
-
-    def __init__(self):
-        BaseCallbackHandler.__init__(self)
-        self.events = []
-
-    def on_llm_start(self, serialized: Dict[str, Any], prompts: List[str], **kwargs: Any) -> None:
-        """Run when LLM starts running."""
-        self.events.append(("on_llm_start", serialized, prompts, kwargs))
-
-    def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
-        """Run on new LLM token. Only available when streaming is enabled."""
-        self.events.append(("on_llm_new_token", token, kwargs))
-
-    def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:
-        """Run when LLM ends running."""
-        self.events.append(("on_llm_end", response, kwargs))
-
-    def on_llm_error(self, error: Union[Exception, KeyboardInterrupt], **kwargs: Any) -> None:
-        """Run when LLM errors."""
-        self.events.append(("on_llm_error", error, kwargs))
-
-    def on_chain_start(self, serialized: Dict[str, Any], inputs: Dict[str, Any], **kwargs: Any) -> None:
-        """Run when chain starts running."""
-        self.events.append(("on_chain_start", serialized, inputs, kwargs))
-
-    def on_chain_end(self, outputs: Dict[str, Any], **kwargs: Any) -> None:
-        """Run when chain ends running."""
-        self.events.append(("on_chain_end", outputs, kwargs))
-
-    def on_chain_error(self, error: Union[Exception, KeyboardInterrupt], **kwargs: Any) -> None:
-        """Run when chain errors."""
-        self.events.append(("on_chain_error", error, kwargs))
-
-    def on_tool_start(self, serialized: Dict[str, Any], input_str: str, **kwargs: Any) -> None:
-        """Run when tool starts running."""
-        self.events.append(("on_tool_start", serialized, input_str, kwargs))
-
-    def on_tool_end(self, output: str, **kwargs: Any) -> None:
-        """Run when tool ends running."""
-        self.events.append(("on_tool_end", output, kwargs))
-
-    def on_tool_error(self, error: Union[Exception, KeyboardInterrupt], **kwargs: Any) -> None:
-        """Run when tool errors."""
-        self.events.append(("on_tool_error", error, kwargs))
-
-    def on_text(self, text: str, **kwargs: Any) -> None:
-        """Run on arbitrary text."""
-        self.events.append(("on_text", text, kwargs))
-
-    def on_agent_action(self, action: AgentAction, **kwargs: Any) -> None:
-        """Run on agent action."""
-        self.events.append(("on_agent_action", action, kwargs))
-
-    def on_agent_finish(self, finish: AgentFinish, **kwargs: Any) -> None:
-        """Run on agent end."""
-        self.events.append(("on_agent_finish", finish, kwargs))
-
-    @property
-    def ignore_llm(self) -> bool:
-        """Whether to ignore LLM callbacks."""
-        return False
-
-    @property
-    def ignore_chain(self) -> bool:
-        """Whether to ignore chain callbacks."""
-        return False
-
-    @property
-    def ignore_agent(self) -> bool:
-        """Whether to ignore agent callbacks."""
-        return False
-
-    @property
-    def ignore_chat_model(self) -> bool:
-        """Whether to ignore chat model callbacks."""
-        return False
-
-
-def show(*values):
-    """For debugging purposes"""
-    print(*values[:-1])
-    return values[-1]()
-
-
+# TODO turn into pydantic class
+# TODO handle_parsing_errors: Union[bool, str, Callable[[OutputParserException], str]] = False
+# TODO max_execution_time: Optional[float] = None
+# TODO max_iterations: Optional[int] = 15
 class ChatSession:
     history: list[Tuple[str, str]]
     feedback: list[dict]
@@ -123,10 +40,68 @@ class ChatSession:
         self.history = history or []
         self.feedback = []
         self.config = config
+        self.scratchpad_dir = TemporaryDirectory()
 
     def clear(self) -> None:
         self.history = []
         self.feedback = []
+
+    def get_tools(self, llm: BaseChatModel, callbacks: list) -> list:
+        all_tools = (
+            load_tools(
+                self.config.tools,
+                llm=llm,
+                callbacks=callbacks,
+            )
+            + tools
+        )
+        file_toolkit = FileManagementToolkit(
+            root_dir=str(self.scratchpad_dir.name),
+            selected_tools=["read_file", "write_file", "list_directory", "file_search"],
+        )
+        all_tools.extend(file_toolkit.tools())
+        if brave_key := self.config.get_api_key("brave"):
+            all_tools.append(BraveSearch(api_key=brave_key, search_kwargs={"count": 3}))
+        if not self.config.dry_run and False:
+            for t in getmembers(gradio_tools, isclass):
+                if t[0] not in ("GradioTool", "ImageCaptioningTool", "SAMImageSegmentationTool"):
+                    try:
+                        # TODO get rid of printing
+                        all_tools.append(t[1]().langchain)
+                    except Exception as e:
+                        logging.warning("Exception occured when loading, skipping", t[0], e)
+        # TODO: add searching for webhooks
+        if ifttt_key := self.config.get_api_key("ifttt"):
+            for trigger in self.config.ifttt_webhooks:
+                all_tools.append(
+                    IFTTTWebhook(
+                        # name="Spotify",
+                        # description="Add a song to spotify playlist",
+                        url=f"https://maker.ifttt.com/trigger/{trigger}/json/with/key/{ifttt_key}"
+                    )
+                )
+        elif len(self.config.ifttt_webhooks) != 0:
+            logging.warning("IFTTT token is required to load webhooks, skipping")
+        for url in self.config.graphql_endpoints:
+            wrapper = GraphQLAPIWrapper(graphql_endpoint=url)
+            all_tools.append(BaseGraphQLTool(graphql_wrapper=wrapper))
+        for url in self.config.chatgpt_plugins:
+            all_tools.append(AIPluginTool.from_plugin_url(f"{url}/.well-known/ai-plugin.json"))
+        for url in self.config.openapi_specs:
+            all_tools.extend(NLAToolkit.from_llm_and_url(llm, url).tools())
+        for fn in self.config.include:
+            if str(fn).endswith(".csv"):
+                all_tools.append(
+                    create_csv_agent(
+                        llm,
+                        fn,
+                        verbose=self.config.verbose,
+                        agent_type=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
+                    )
+                )
+            else:
+                logging.warning(f"Not able to load {fn} yet, skipping")
+        return all_tools
 
     def get_agent_chain(
         self,
@@ -139,41 +114,40 @@ class ChatSession:
         for field in ("manual", "cache", "personality", "response_limit"):
             if getattr(self.config, field):
                 raise NotImplementedError(field)
+        model = model or self.config.model
         if model in ("claude-v1", "claude-instant-v1"):
             raise NotImplementedError(model)
 
-        callbacks = [CustomCallback()]
+        callbacks = [
+            HumanApprovalCallbackHandler(),
+            FinalStreamingStdOutCallbackHandler(),
+        ]
         llm = ChatOpenAI(
-            callbacks=[FinalStreamingStdOutCallbackHandler()],
+            callbacks=callbacks,
             temperature=temperature or self.config.temperature,
-            model_name=model or self.config.model,
+            model_name=model + "-0613",
             openai_api_key=openai_api_key or self.config.openai_api_key,
             model_kwargs={
                 "top_p": top_p or self.config.top_p,
             },
         )
-        all_tools = tools + load_tools(
-            self.config.tools,
-            llm=llm,
-            callbacks=callbacks,
-        )
-        for t in getmembers(gradio_tools, isclass):
-            if t[0] not in ("GradioTool", "ImageCaptioningTool"):
-                try:
-                    # TODO get rid of printing
-                    all_tools.append(t[1]().langchain)
-                except Exception as e:
-                    print("Exception occured when loading", t[0], e)
-        if self.config.agent == "structured-react":
+
+        if self.config.agent in ("structured-react", "openai-functions"):
+            if self.config.agent == "openai-functions" and not model.startswith("gpt-"):
+                raise ValueError(f"Cannot use `openai-functions` agent with {model} model")
             memory = ConversationTokenBufferMemory(
                 llm=llm,
                 max_token_limit=memory_limit or self.config.memory_limit,
                 memory_key="chat_history",
             )
+            tools = self.get_tools(llm, callbacks)
             return initialize_agent(
-                all_tools,
+                tools,
                 llm,
-                agent=AgentType.STRUCTURED_CHAT_ZERO_SHOT_REACT_DESCRIPTION,
+                agent={
+                    "openai-functions": AgentType.OPENAI_FUNCTIONS,
+                    "structured-react": AgentType.STRUCTURED_CHAT_ZERO_SHOT_REACT_DESCRIPTION,
+                }[self.config.agent],
                 memory=memory,
                 callbacks=callbacks,
                 verbose=self.config.verbose,
@@ -185,7 +159,7 @@ class ChatSession:
             )
         else:
             planner = load_chat_planner(model)
-            executor = load_agent_executor(model, all_tools, verbose=self.config.verbose)
+            executor = load_agent_executor(model, tools, verbose=self.config.verbose)
             return PlanAndExecute(planner=planner, executor=executor, verbose=self.config.verbose)
 
     def vote_last_response(self, vote_type: Literal["upvote", "downvote"], request: Optional[Request] = None) -> dict:

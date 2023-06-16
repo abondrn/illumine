@@ -2,6 +2,7 @@ import argparse
 import os
 import sys
 from typing import get_origin, Literal, get_args, Tuple, Union, Any
+import functools
 
 from pydantic import ValidationError
 import yaml
@@ -119,7 +120,7 @@ def parse_args(cls: BaseConfig, *args: Any, **kwargs: Any) -> BaseConfig:
             config_file = yaml.safe_load(f)
         kwargs = config_file
         for k, v in kwargs.items():
-            if type(v) is dict and get_origin(cls.__fields__[k].annotation) is list:
+            if type(v) is dict and k in cls.__fields__ and get_origin(cls.__fields__[k].annotation) is list:
                 kwargs[k] = list(v.items())
     else:
         kwargs = {}
@@ -136,11 +137,28 @@ def parse_args(cls: BaseConfig, *args: Any, **kwargs: Any) -> BaseConfig:
         raise e
 
 
+@functools.partial(yaml.add_representer, str)
+def str_presenter(dumper, data):
+    lines = data.splitlines()
+
+    if len(data.splitlines()) > 2 and max(map(len, lines)) > 20:
+        return dumper.represent_scalar("tag:yaml.org,2002:str", data, style="|")
+    else:
+        return dumper.represent_scalar("tag:yaml.org,2002:str", data)
+
+
 def main():
     config = parse_args(Config)
     chat = chain.ChatSession(config)
 
-    if config.gradio:
+    if config.dry_run:
+        agent_chain = chat.get_agent_chain()
+        try:
+            print(yaml.dump(agent_chain.agent.llm_chain.prompt.dict()))
+        except Exception as e:
+            print("Prompt preview not available for this agent type: ", agent_chain)
+            raise e
+    elif config.gradio:
         ui = gradio.build_gradio(chat)
         try:
             ui.launch(server_name=config.host, debug=config.debug, server_port=config.port, share=False)
@@ -162,8 +180,13 @@ def main():
                     print(cb)
                     break
                 except Exception as e:
-                    print(e)
                     print(cb)
+                    import traceback
+
+                    traceback.print_exc(e)
+                    import pdb
+
+                    pdb.post_mortem(e.__traceback__)
     else:
         agent_chain = chat.get_agent_chain()
         agent_chain(get_stdin() + config.prompt)

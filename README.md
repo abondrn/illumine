@@ -83,21 +83,33 @@ Memory
    - [ ] __filter search results with https://python.langchain.com/en/latest/modules/prompts/example_selectors.html#__
 
 Tools
-   - [X] gradio tools
-   - [ ] **Brave Search API**
+   - gradio tools
+     - [ ] add image loading
+     - [ ] add video loading
+     - [ ] add audio loading
+   - [ ] enable loading tools from paths
+   - [ ] enable warning when required modules don't exist (and adding to dependencies interactively based on config)
+   - **Brave Search API**
+     - [ ] add setup instructions
+     - [ ] allow configuration of search results
    - [ ] snscrape
    - [ ] platypush
    - [ ] __backtrack when attempting to call the same API with the same arguments__
-   - [ ] **[confirmation](https://python.langchain.com/en/latest/modules/agents/tools/human_approval.html)**
+   - [X] **[confirmation](https://python.langchain.com/en/latest/modules/agents/tools/human_approval.html)**
    - chains as tools
-     - [ ] https://python.langchain.com/en/latest/modules/chains/generic/from_hub.html
      - [ ] https://python.langchain.com/en/latest/modules/chains/examples/flare.html
      - [ ] https://python.langchain.com/en/latest/modules/chains/examples/llm_bash.html
      - [ ] https://python.langchain.com/en/latest/modules/chains/examples/pal.html
-   - [ ] __.well-known/ai-plugin.json__
+   - .well-known/ai-plugin.json
+  - https://python.langchain.com/en/latest/modules/chains/examples/openapi.html
+    - [ ] extract all GET requests from a spec
+    - [ ] exclude output paths
+    - [X] https://python.langchain.com/en/latest/modules/agents/toolkits/examples/openapi.html
+    - [ ] authentication
    - [ ] https://github.com/Significant-Gravitas/Auto-GPT-Plugins
    - [ ] https://python.langchain.com/en/latest/modules/agents/toolkits/examples/playwright.html
-   - [ ] https://python.langchain.com/en/latest/modules/agents/tools/tools_as_openai_functions.html
+   - https://python.langchain.com/en/latest/modules/agents/tools/tools_as_openai_functions.html
+     - [ ] fix bug where when running the visualizer, no functions are called
    - __todo__ goal tree persistance
      - [ ] checkvist
      - [ ] markdown checklists
@@ -106,6 +118,7 @@ Tools
      - [ ] github issues
      - [ ] delegation
    - [ ] stream cursors (paginated APIs)
+   - [ ] https://index.discord.red/
 
 Tech Debt
    - [X] better specification for API keys

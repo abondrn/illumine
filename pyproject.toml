@@ -73,7 +73,8 @@ gradio = "gradio src/lemmata/cli.py"
 release = "python -m tasks.release"
 test = "pytest tests/"
 doc = {shell = "cd docs && mkdocs serve", help = "Start the dev server for doc preview"}
-lint = "pre-commit run --all-files"
+lint = "pre-commit run"
+lint-all = "pre-commit run --all-files"
 install = {shell = "pdm install && pre-commit install"}
 
 [tool.black]
