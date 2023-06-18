@@ -23,3 +23,12 @@ repos:
     rev: v1.1.1
     hooks:
       - id: mypy
+  - repo: local
+    hooks:
+    - id: unittest
+      name: unittest
+      entry: pdm run test
+      language: python
+      types: [python]
+      pass_filenames: false
+      verbose: true

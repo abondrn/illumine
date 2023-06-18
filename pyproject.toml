@@ -13,11 +13,7 @@ readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
     "langchain>=0.0.198",
-    "langchain-visualizer>=0.0.25",
-    "openai>=0.27.8",
-    "tiktoken>=0.4.0",
     "regex-llm>=0.1.0",
-    "docarray>=0.33.0",
     "pathspec>=0.11.1",
 ]
 dynamic = ["version"]
@@ -32,10 +28,15 @@ Repository = "https://github.com/abondrn/lemmata"
 Homepage = "https://github.com/abondrn/lemmata"
 
 [project.optional-dependencies]
+openai = [
+    "openai>=0.27.8",
+    "tiktoken>=0.4.0",
+]
 ui = [
     "gradio",
     "rich>=13.4.1",
     "halo>=0.0.31",
+    "langchain-visualizer>=0.0.25",
 ]
 tools = [
     "llama-index>=0.6.23",
@@ -45,6 +46,11 @@ tools = [
     "gradio-tools>=0.0.9",
     "snscrape",
     "platypush>=0.24.4",
+    "docarray>=0.33.0",
+]
+stt = [
+    "PyAudio>=0.2.13",
+    "SpeechRecognition>=3.10.0",
 ]
 [tool.pdm.version]
 source = "scm"
@@ -92,6 +98,7 @@ select = [
   "RUF",  # ruff
   "W",    # pycodestyle
   "YTT",  # flake8-2020
+  "I001",  # isort
 ]
 extend-ignore = ["B018", "B019"]
 src = ["src"]
@@ -103,6 +110,7 @@ max-complexity = 10
 
 [tool.ruff.isort]
 known-first-party = ["lemmata"]
+force-sort-within-sections = true
 
 [tool.mypy]
 follow_imports = "silent"
@@ -162,6 +170,7 @@ atomic = true
 skip_glob = ["*/setup.py"]
 filter_files = true
 known_first_party = ["lemmata"]
+float_to_top = true
 
 [tool.pytest.ini_options]
 filterwarnings = [

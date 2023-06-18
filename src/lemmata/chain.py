@@ -1,28 +1,29 @@
-from typing import Optional, Tuple, Literal
-import logging
-import time
 from inspect import getmembers, isclass
+import logging
+import subprocess
 from tempfile import TemporaryDirectory
+import time
+from typing import Literal, Optional, Tuple
 
-from langchain.chat_models import ChatOpenAI
-from langchain.callbacks.streaming_stdout_final_only import FinalStreamingStdOutCallbackHandler
-from langchain.agents import load_tools, AgentType, create_csv_agent
-from langchain.memory import ConversationTokenBufferMemory
-from langchain.chains import ConversationChain
 from gradio import Request
-from langchain.experimental.plan_and_execute import PlanAndExecute, load_agent_executor, load_chat_planner
 import gradio_tools
-from langchain.tools import BraveSearch, AIPluginTool, IFTTTWebhook
+from langchain.agents import AgentType, Tool, ZeroShotAgent, create_csv_agent, load_tools
 from langchain.agents.agent_toolkits import FileManagementToolkit, NLAToolkit
-from langchain.utilities.graphql import GraphQLAPIWrapper
-from langchain.tools.graphql.tool import BaseGraphQLTool
+from langchain.callbacks.streaming_stdout_final_only import FinalStreamingStdOutCallbackHandler
+from langchain.chains import ConversationChain
+from langchain.chat_models import ChatOpenAI
 from langchain.chat_models.base import BaseChatModel
+from langchain.experimental.plan_and_execute import PlanAndExecute, load_agent_executor, load_chat_planner
+from langchain.memory import ConversationTokenBufferMemory
+from langchain.tools import AIPluginTool, BraveSearch, IFTTTWebhook
+from langchain.tools.graphql.tool import BaseGraphQLTool
+from langchain.utilities.graphql import GraphQLAPIWrapper
 
-from lemmata.tools import tools
 from lemmata.config import Config
+from lemmata.langchain.agent_executor import AgentExecutor
 from lemmata.langchain.human_callback import HumanApprovalCallbackHandler
 from lemmata.langchain.initialize_agent import initialize_agent
-
+from lemmata.tools import tools
 
 logger = logging.getLogger()
 
@@ -55,13 +56,15 @@ class ChatSession:
             )
             + tools
         )
+        # TODO: save files from session
         file_toolkit = FileManagementToolkit(
             root_dir=str(self.scratchpad_dir.name),
             selected_tools=["read_file", "write_file", "list_directory", "file_search"],
         )
-        all_tools.extend(file_toolkit.tools())
+        all_tools.extend(file_toolkit.get_tools())
         if brave_key := self.config.get_api_key("brave"):
-            all_tools.append(BraveSearch(api_key=brave_key, search_kwargs={"count": 3}))
+            # TODO: configure count
+            all_tools.append(BraveSearch.from_api_key(api_key=brave_key, search_kwargs={"count": 5}))
         if not self.config.dry_run and False:
             for t in getmembers(gradio_tools, isclass):
                 if t[0] not in ("GradioTool", "ImageCaptioningTool", "SAMImageSegmentationTool"):
@@ -69,7 +72,7 @@ class ChatSession:
                         # TODO get rid of printing
                         all_tools.append(t[1]().langchain)
                     except Exception as e:
-                        logging.warning("Exception occured when loading, skipping", t[0], e)
+                        logger.warning("Exception occured when loading, skipping", t[0], e)
         # TODO: add searching for webhooks
         if ifttt_key := self.config.get_api_key("ifttt"):
             for trigger in self.config.ifttt_webhooks:
@@ -81,14 +84,18 @@ class ChatSession:
                     )
                 )
         elif len(self.config.ifttt_webhooks) != 0:
-            logging.warning("IFTTT token is required to load webhooks, skipping")
-        for url in self.config.graphql_endpoints:
-            wrapper = GraphQLAPIWrapper(graphql_endpoint=url)
-            all_tools.append(BaseGraphQLTool(graphql_wrapper=wrapper))
+            logger.warning("IFTTT token is required to load webhooks, skipping")
+        try:
+            for url in self.config.graphql_endpoints:
+                wrapper = GraphQLAPIWrapper(graphql_endpoint=url)
+                all_tools.append(BaseGraphQLTool(graphql_wrapper=wrapper))
+        except ImportError as e:
+            logger.warning(e)
         for url in self.config.chatgpt_plugins:
             all_tools.append(AIPluginTool.from_plugin_url(f"{url}/.well-known/ai-plugin.json"))
         for url in self.config.openapi_specs:
-            all_tools.extend(NLAToolkit.from_llm_and_url(llm, url).tools())
+            # TODO: create tool names that are compatible with OpenAI functions (no dash)
+            all_tools.extend(NLAToolkit.from_llm_and_url(llm, url).get_tools())
         for fn in self.config.include:
             if str(fn).endswith(".csv"):
                 all_tools.append(
@@ -100,7 +107,7 @@ class ChatSession:
                     )
                 )
             else:
-                logging.warning(f"Not able to load {fn} yet, skipping")
+                logger.warning(f"Not able to load {fn} yet, skipping")
         return all_tools
 
     def get_agent_chain(
@@ -111,7 +118,8 @@ class ChatSession:
         temperature: Optional[float] = None,
         top_p: Optional[float] = None,
     ) -> ConversationChain:
-        for field in ("manual", "cache", "personality", "response_limit"):
+        # TODO: use verbose to set log level
+        for field in ("cache", "personality", "response_limit"):
             if getattr(self.config, field):
                 raise NotImplementedError(field)
         model = model or self.config.model
@@ -132,14 +140,15 @@ class ChatSession:
             },
         )
 
+        memory = ConversationTokenBufferMemory(
+            llm=llm,
+            max_token_limit=memory_limit or self.config.memory_limit,
+            memory_key="chat_history",
+        )
+
         if self.config.agent in ("structured-react", "openai-functions"):
             if self.config.agent == "openai-functions" and not model.startswith("gpt-"):
                 raise ValueError(f"Cannot use `openai-functions` agent with {model} model")
-            memory = ConversationTokenBufferMemory(
-                llm=llm,
-                max_token_limit=memory_limit or self.config.memory_limit,
-                memory_key="chat_history",
-            )
             tools = self.get_tools(llm, callbacks)
             return initialize_agent(
                 tools,
@@ -157,10 +166,90 @@ class ChatSession:
                     "max_iterations": 15,
                 },
             )
-        else:
+        elif self.config.agent == "plan-and-execute":
             planner = load_chat_planner(model)
+            # TODO: replace with own agent executor
             executor = load_agent_executor(model, tools, verbose=self.config.verbose)
             return PlanAndExecute(planner=planner, executor=executor, verbose=self.config.verbose)
+        elif self.config.agent == "autogpt":
+            from langchain.experimental import AutoGPT
+
+            # TODO: allow configuration of name and role
+            agent = AutoGPT.from_llm_and_tools(
+                ai_name="Tom",
+                ai_role="Assistant",
+                tools=tools,
+                llm=llm,
+                memory=memory,
+                # chat_history_memory=FileChatMessageHistory("chat_history.txt"),
+            )
+            # Set verbose to be true
+            agent.chain.verbose = self.config.verbose
+            return agent
+        elif self.config.agent == "babyagi":
+            # [BabyAGI](https://github.com/yoheinakajima/babyagi/tree/main) by [Yohei Nakajima](https://twitter.com/yoheinakajima)
+            # is an AI agent that can generate and pretend to execute tasks based on a given objective.
+            from langchain import LLMChain, PromptTemplate
+            from langchain.embeddings import OpenAIEmbeddings
+            from langchain.experimental import BabyAGI
+
+            todo_prompt = PromptTemplate.from_template(
+                "You are a planner who is an expert at coming up with a todo list for a given objective."
+                " Come up with a todo list for this objective: {objective}"
+            )
+            todo_chain = LLMChain(llm=llm, prompt=todo_prompt)
+            tools.append(
+                Tool(
+                    name="TODO",
+                    func=todo_chain.run,
+                    description=(
+                        "useful for when you need to come up with todo lists."
+                        " Input: an objective to create a todo list for."
+                        " Output: a todo list for that objective."
+                        " Please be very clear what the objective is!"
+                    ),
+                )
+            )
+
+            prefix = (
+                "You are an AI who performs one task based on the following objective: {objective}."
+                " Take into account these previously completed tasks: {context}."
+            )
+            suffix = "Question: {task}\n{agent_scratchpad}"
+            prompt = ZeroShotAgent.create_prompt(
+                tools,
+                prefix=prefix,
+                suffix=suffix,
+                input_variables=["objective", "task", "context", "agent_scratchpad"],
+            )
+            llm_chain = LLMChain(llm=llm, prompt=prompt)
+            agent = ZeroShotAgent(llm_chain=llm_chain, allowed_tools=[t.name for t in tools])
+
+            agent_executor = AgentExecutor.from_agent_and_tools(agent=agent, tools=tools, verbose=self.config.verbose)
+
+            from langchain.docstore import InMemoryDocstore
+            from langchain.vectorstores import FAISS
+
+            # Define your embedding model
+            embeddings_model = OpenAIEmbeddings()
+            # Initialize the vectorstore as empty
+            import faiss
+
+            embedding_size = 1536
+            index = faiss.IndexFlatL2(embedding_size)
+            vectorstore = FAISS(embeddings_model.embed_query, index, InMemoryDocstore({}), {})
+
+            # If None, will keep on going forever
+            max_iterations: Optional[int] = None
+            baby_agi = BabyAGI.from_llm(
+                llm=llm,
+                vectorstore=vectorstore,
+                task_execution_chain=agent_executor,
+                verbose=self.config.verbose,
+                max_iterations=max_iterations,
+            )
+            return baby_agi
+            # baby_agi({"objective": OBJECTIVE})
 
     def vote_last_response(self, vote_type: Literal["upvote", "downvote"], request: Optional[Request] = None) -> dict:
         feedback = {
@@ -173,6 +262,9 @@ class ChatSession:
         logger.info(feedback)
         self.feedback.append(feedback)
         return feedback
+
+    def speak(self, text: str) -> None:
+        subprocess.call(["say", text])
 
     def feed(
         self,
@@ -195,4 +287,6 @@ class ChatSession:
         else:
             output = agent_chain(inp)["output"]
             self.history.append((inp, output))
+            if self.config.tts:
+                self.speak(output)
         return self.history

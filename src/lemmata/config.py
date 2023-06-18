@@ -1,15 +1,27 @@
-from typing import Optional, Literal, Tuple, Union
 from pathlib import Path
+from typing import Literal, Optional, Tuple, Union
 
-from pydantic import BaseModel, Field, FilePath, URL, ModelField
-
+import pydantic
+from pydantic import AnyHttpUrl, BaseModel, Field, FilePath
 
 Provider = Literal[
-    "openai", "anthropic", "brave", "zapier_nla", "wolfram_alpha", "openweathermap", "bing", "metaphor", "scenexplain", "ifttt"
+    "openai",
+    "anthropic",
+    "brave",
+    "zapier_nla",
+    "wolfram_alpha",
+    "openweathermap",
+    "bing",
+    "metaphor",
+    "scenexplain",
+    "ifttt",
+    "gplaces",
 ]
 
+Agent = Literal["structured-react", "plan-and-execute", "openai-functions", "autogpt", "babyagi"]
 
-def description(field: ModelField) -> str:
+
+def description(field: pydantic.fields.ModelField) -> str:
     """Standardises argument description.
 
     Args:
@@ -86,30 +98,31 @@ class Config(BaseConfig):
     model: Literal["gpt-3.5-turbo", "gpt-4", "gpt-3.5-turbo-16k", "claude-v1", "claude-instant-v1"] = Field(
         default="gpt-3.5-turbo", description="Which LLM API to use"
     )
-    agent: Literal["structured-react", "plan-and-execute", "openai-functions"] = Field(default="structured-react")
+    agent: Agent = Field(default="structured-react")
     cost_limit: Optional[float] = Field(description="The maximum allowable cost before aborting the chain")
     response_limit: Optional[int] = Field(description="Number of tokens to limit the response to")
     memory_limit: Optional[int] = Field(description="Number of tokens to limit history context to")
-    tools: list[str] = Field(description="Names of tools to enable")
     # system: str
     personality: Optional[str]
 
+    tools: list[str] = Field(description="Names of tools to enable", default_factory=list)
     api_key: list[Tuple[Provider, str]] = Field(letter="k")
-    ifttt_webhooks: list[str]
-    graphql_endpoints: list[URL]
-    chatgpt_plugins: list[URL]
-    openapi_specs: list[URL]
-    include: list[Union[Path, URL]]
+    ifttt_webhooks: list[str] = Field(default_factory=list)
+    graphql_endpoints: list[AnyHttpUrl] = Field(default_factory=list)
+    chatgpt_plugins: list[AnyHttpUrl] = Field(default_factory=list)
+    openapi_specs: list[AnyHttpUrl] = Field(default_factory=list)
+    include: list[Union[Path, AnyHttpUrl]] = Field(default_factory=list)
 
     prompt: Optional[str] = Field(arg=0)
     interactive: bool = Field(letter="i", description="Spawns an interactive session")
     visualize: bool = Field(description="Requires langchain-visualizer", letter="z")
     gradio: bool = Field(description="Requires gradio", letter="g")
-    manual: bool = Field(description="Human in the Loop mode", letter="m")
     cache: bool = Field(description="Whether to cache the responses of the LLM")
     dry_run: bool
+    tts: bool = Field(description="Speaks the responses using the say command")
+    stt: bool = Field(description="Runs a listen loop that listens to the microphone and transcribes it via sphinx")
 
-    def get_api_key(self, service: str) -> Optional[str]:
+    def get_api_key(self, service: Provider) -> Optional[str]:
         for p, k in self.api_key:
             if p == service:
                 return k

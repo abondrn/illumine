@@ -1,15 +1,15 @@
 import argparse
+import functools
 import os
 import sys
-from typing import get_origin, Literal, get_args, Tuple, Union, Any
-import functools
+from typing import Any, Literal, Tuple, Union, get_args, get_origin
 
+from langchain.callbacks import get_openai_callback
 from pydantic import ValidationError
 import yaml
-from langchain.callbacks import get_openai_callback
 
-from lemmata import gradio, chain
-from lemmata.config import Config, BaseConfig, description
+from lemmata import chain, gradio
+from lemmata.config import BaseConfig, Config, description
 
 
 def get_stdin():
@@ -40,7 +40,7 @@ def metavar(type_: type, default: str = "ARG") -> Union[str, Tuple[str, ...]]:
 
 # TODO https://stackoverflow.com/questions/27146262/create-variable-key-value-pairs-with-argparse-python
 # TODO singularize metavar
-def generate_argparser(dataclass):
+def generate_argparser(dataclass: BaseConfig) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
 
     # Iterate over the fields of the Pydantic dataclass
@@ -49,7 +49,7 @@ def generate_argparser(dataclass):
         field_name = field.alias
         extra = field.field_info.extra
 
-        kwargs = {}
+        kwargs: dict = {}
         if field.type_ is bool:
             default = field.default if hasattr(field, "default") else False
             if default:
@@ -57,7 +57,6 @@ def generate_argparser(dataclass):
             else:
                 kwargs["action"] = "store_true"
         elif get_origin(field.annotation) is list:
-            kwargs["default"] = []
             item_type = get_args(field.annotation)[0]
             if get_origin(item_type) is tuple:
                 kwargs["nargs"] = 2
@@ -108,7 +107,6 @@ def generate_argparser(dataclass):
 # prog - The name of the program (default: os.path.basename(sys.argv[0]))
 # TODO description - Text to display before the argument help (by default, no text)
 # epilog - Text to display after the argument help (by default, no text)
-# TODO parents - A list of ArgumentParser objects whose arguments should also be included
 # formatter_class - A class for customizing the help output
 # conflict_handler - The strategy for resolving conflicting optionals (usually unnecessary)
 # allow_abbrev - Allows long options to be abbreviated if the abbreviation is unambiguous. (default: True)
@@ -130,10 +128,8 @@ def parse_args(cls: BaseConfig, *args: Any, **kwargs: Any) -> BaseConfig:
     try:
         return cls(**kwargs)
     except ValidationError as e:
-        # TODO remove print statements
-        for error in e.errors():
-            print(error)
-        print(e.json())
+        # TODO allow manual entry of missing fields
+        print(e.errors())
         raise e
 
 
@@ -145,6 +141,65 @@ def str_presenter(dumper, data):
         return dumper.represent_scalar("tag:yaml.org,2002:str", data, style="|")
     else:
         return dumper.represent_scalar("tag:yaml.org,2002:str", data)
+
+
+def listen(chat):
+    import speech_recognition as sr
+
+    r = sr.Recognizer()
+    agent_chain = chat.get_agent_chain()
+    with sr.Microphone() as source:
+        print("Calibrating...")
+        r.adjust_for_ambient_noise(source, duration=5)
+        # optional parameters to adjust microphone sensitivity
+        # r.energy_threshold = 200
+        # r.pause_threshold=0.5
+        while True:
+            print("listening now...")
+            try:
+                audio = r.listen(source, timeout=5, phrase_time_limit=30)
+                print("Recognizing...")
+                # TODO: allow selection of which recognizer to use
+                text = r.recognize_sphinx(
+                    audio,
+                    # model="medium.en",
+                    # show_dict=True,
+                )["text"]
+            except Exception as e:
+                unrecognized_speech_text = f"Sorry, I didn't catch that. Exception was: {e}s"
+                text = unrecognized_speech_text
+            print(text)
+
+            response_text = chat.feed(text, agent_chain)
+            print(response_text)
+
+
+def repl(chat, input_func=input):
+    import readline
+
+    readline.parse_and_bind("tab: complete")
+    agent_chain = chat.get_agent_chain()
+    # TODO: add quit command
+    # TODO: add history
+    while True:
+        with get_openai_callback() as cb:
+            try:
+                prompt = input_func("> ")
+                chat.feed(prompt, agent_chain)
+            except KeyboardInterrupt:
+                print(cb)
+                break
+            except Exception as e:
+                import traceback
+
+                traceback.print_exc()
+
+                if chat.config.debug:
+                    import pdb
+
+                    pdb.post_mortem(e.__traceback__)
+            finally:
+                print(cb)
 
 
 def main():
@@ -168,28 +223,16 @@ def main():
             ui.close()
             raise e
         return ui
+    elif config.stt:
+        listen(chat)
     elif config.interactive:
-        agent_chain = chat.get_agent_chain()
-        while True:
-            with get_openai_callback() as cb:
-                try:
-                    prompt = input("> ")
-                    chat.feed(prompt, agent_chain)
-                    print(cb)
-                except KeyboardInterrupt:
-                    print(cb)
-                    break
-                except Exception as e:
-                    print(cb)
-                    import traceback
-
-                    traceback.print_exc(e)
-                    import pdb
-
-                    pdb.post_mortem(e.__traceback__)
+        repl(chat)
     else:
         agent_chain = chat.get_agent_chain()
-        agent_chain(get_stdin() + config.prompt)
+        lines = list(get_stdin())
+        if config.prompt:
+            lines.append(config.prompt)
+        agent_chain("\n".join(lines))
 
 
 if __name__ == "__main__":

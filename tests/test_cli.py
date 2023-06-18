@@ -3,7 +3,6 @@ import pytest
 from lemmata import cli
 from lemmata.config import Config
 
-
 # TODO test loading of config files
 # TODO test interactive
 # TODO mock out LLM https://python.langchain.com/en/latest/modules/models/llms/examples/fake_llm.html
@@ -17,12 +16,12 @@ def test_help():
     assert e.value.code == 0
 
 
-def test_parse():
+def test_parse_no_config_file():
     cli.parse_args(
         Config,
         (
             '"prompt" -t 1.0 -p 1.0 --model gpt-3.5-turbo --agent structured-react -k openai sk-KEY'
-            "--cost-limit .03 --response-limit 100 --memory-limit 3000 -i -z -g -m --cache -vv"
-            "-l file.log --host localhost -d --port 800"
+            " --cost-limit .03 --response-limit 100 --memory-limit 3000 -i -z -g --cache -vv"
+            " -l file.log --host localhost -d --port 800"
         ).split(),
     )

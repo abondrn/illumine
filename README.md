@@ -81,17 +81,17 @@ Memory
    - [ ] caching persistance
    - [ ] **https://python.langchain.com/en/latest/modules/agents/agents/custom_agent_with_tool_retrieval.html**
    - [ ] __filter search results with https://python.langchain.com/en/latest/modules/prompts/example_selectors.html#__
+   - [ ] https://github.com/nomic-ai/semantic-search-app-template
 
 Tools
    - gradio tools
-     - [ ] add image loading
+     - [ ] add image loading: https://python.langchain.com/docs/use_cases/multi_modal/image_agent
      - [ ] add video loading
      - [ ] add audio loading
    - [ ] enable loading tools from paths
    - [ ] enable warning when required modules don't exist (and adding to dependencies interactively based on config)
    - **Brave Search API**
      - [ ] add setup instructions
-     - [ ] allow configuration of search results
    - [ ] snscrape
    - [ ] platypush
    - [ ] __backtrack when attempting to call the same API with the same arguments__
