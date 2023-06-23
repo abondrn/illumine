@@ -34,6 +34,12 @@ Alternatively, install with `pip` to the user site:
 $ python -m pip install --user lemmata
 ```
 
+If you want to enable the `stt` flag, first install portaudio (`brew install portaudio` on MacOS)
+
+## Usage
+
+Run `lemmata -h` to get a full list of input flags and commands.
+
 ## Roadmap
 
  - Features needed before next minor release **marked in bold**
@@ -95,7 +101,7 @@ Tools
    - [ ] snscrape
    - [ ] platypush
    - [ ] __backtrack when attempting to call the same API with the same arguments__
-   - [X] **[confirmation](https://python.langchain.com/en/latest/modules/agents/tools/human_approval.html)**
+   - [X] [confirmation](https://python.langchain.com/en/latest/modules/agents/tools/human_approval.html)
    - chains as tools
      - [ ] https://python.langchain.com/en/latest/modules/chains/examples/flare.html
      - [ ] https://python.langchain.com/en/latest/modules/chains/examples/llm_bash.html
@@ -124,16 +130,21 @@ Tech Debt
    - [X] better specification for API keys
    - [ ] **swap out argparse for a CLI parsing framework that supports environment variables and completions**
    - [ ] allow setting required arguments via prompt
+   - [ ] add example notebook
    - [ ] __add streaming of final output__
    - [ ] better error messages for misspelt enum values
    - [ ] pydantic field groups
    - [ ] https://github.com/pydantic/pydantic/discussions/4281
    - [ ] **better handling of `KeyboardInterrupt`**
    - [ ] **remove all print statements**
-   - [ ] **add more precommit checks, require all unit tests pass**
+   - add more precommit checks
+     - [X] require all unit tests pass
+     - [ ] add test converage
    - [ ] __add documentation for all major methods__
    - [ ] __typecheck all major methods__
    - [ ] **add utility to print initial agent prompt and exit**
+   - [ ] interactive import
+   - [ ] add doctests
    - lifecycle commands
      - [ ] **generate config file commented-out, populated with default values**
      - hot swapping

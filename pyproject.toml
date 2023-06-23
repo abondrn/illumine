@@ -47,6 +47,7 @@ tools = [
     "snscrape",
     "platypush>=0.24.4",
     "docarray>=0.33.0",
+    "plugnplai>=0.0.5",
 ]
 stt = [
     "PyAudio>=0.2.13",
@@ -80,6 +81,7 @@ release = "python -m tasks.release"
 test = "pytest tests/"
 doc = {shell = "cd docs && mkdocs serve", help = "Start the dev server for doc preview"}
 lint = "pre-commit run"
+relint = {shell = "git add -u && pre-commit run"}
 lint-all = "pre-commit run --all-files"
 install = {shell = "pdm install && pre-commit install"}
 

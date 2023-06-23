@@ -22,6 +22,6 @@ def test_parse_no_config_file():
         (
             '"prompt" -t 1.0 -p 1.0 --model gpt-3.5-turbo --agent structured-react -k openai sk-KEY'
             " --cost-limit .03 --response-limit 100 --memory-limit 3000 -i -z -g --cache -vv"
-            " -l file.log --host localhost -d --port 800"
+            " -l file.log --host localhost -d --port 800 --tts --stt whisper_api"
         ).split(),
     )

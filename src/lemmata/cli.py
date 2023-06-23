@@ -5,7 +5,7 @@ import sys
 from typing import Any, Literal, Tuple, Union, get_args, get_origin
 
 from langchain.callbacks import get_openai_callback
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 import yaml
 
 from lemmata import chain, gradio
@@ -38,6 +38,20 @@ def metavar(type_: type, default: str = "ARG") -> Union[str, Tuple[str, ...]]:
         }.get(type_, default)
 
 
+class kwargs_append_action(argparse.Action):
+    """
+    argparse action to split an argument into KEY=VALUE form
+    on append to a dictionary.
+    """
+
+    def __call__(self, parser, args, values, option_string=None):
+        try:
+            d = dict(map(lambda x: x.split("="), values))
+        except ValueError:
+            raise argparse.ArgumentError(self, f'Could not parse argument "{values}" as k1=v1 k2=v2 ... format') from None
+        getattr(args, self.dest).update(d)
+
+
 # TODO https://stackoverflow.com/questions/27146262/create-variable-key-value-pairs-with-argparse-python
 # TODO singularize metavar
 def generate_argparser(dataclass: BaseConfig) -> argparse.ArgumentParser:
@@ -65,18 +79,26 @@ def generate_argparser(dataclass: BaseConfig) -> argparse.ArgumentParser:
                 kwargs["nargs"] = argparse.ZERO_OR_MORE
                 kwargs["action"] = argparse._StoreAction
             kwargs["metavar"] = metavar(item_type)
-        elif get_origin(field.annotation) is Literal:
-            kwargs["choices"] = get_args(field.annotation)
+        elif get_origin(field.type_) is Literal:
+            kwargs["choices"] = get_args(field.type_)
+        # elif get_origin(field.annotation) is Optional and get_origin(get_args(field.annotation)[0]) is Literal:
+        #    kwargs["choices"] = get_args(get_args(field.annotation)[0])
         elif "action" in extra:
             kwargs["action"] = extra["action"]
             if kwargs["action"] == "count":
                 kwargs["default"] = 0
-        elif issubclass(field.type_, os.PathLike):
+        elif type(field.type_) is type and issubclass(field.type_, os.PathLike):
             kwargs["type"] = str
             kwargs["metavar"] = "FILE"
+        elif issubclass(field.type_, BaseModel) or get_origin(field.annotation) is dict:
+            kwargs["default"] = {}
+            kwargs["nargs"] = "*"
+            kwargs["action"] = kwargs_append_action
+            kwargs["metavar"] = "KEY=VALUE"
+            kwargs["help"] = "Add key/value params. May appear multiple times. Aggregate in dict"
+        elif field.type_ not in (str, int, float):
+            raise TypeError((field.type_, type(field.type_), field.field_info))
         else:
-            if field.type_ not in (str, int, float):
-                raise TypeError((field.type_, field.field_info))
             kwargs["type"] = field.type_
             kwargs["metavar"] = metavar(field.type_, field.alias.upper())
 
@@ -148,30 +170,40 @@ def listen(chat):
 
     r = sr.Recognizer()
     agent_chain = chat.get_agent_chain()
-    with sr.Microphone() as source:
-        print("Calibrating...")
-        r.adjust_for_ambient_noise(source, duration=5)
-        # optional parameters to adjust microphone sensitivity
-        # r.energy_threshold = 200
-        # r.pause_threshold=0.5
-        while True:
-            print("listening now...")
-            try:
-                audio = r.listen(source, timeout=5, phrase_time_limit=30)
-                print("Recognizing...")
-                # TODO: allow selection of which recognizer to use
-                text = r.recognize_sphinx(
-                    audio,
-                    # model="medium.en",
-                    # show_dict=True,
-                )["text"]
-            except Exception as e:
-                unrecognized_speech_text = f"Sorry, I didn't catch that. Exception was: {e}s"
-                text = unrecognized_speech_text
-            print(text)
+    # TODO: allow selection of microphones
+    try:
+        with sr.Microphone() as source:
+            print("Calibrating...")
+            for k, v in chat.config.recogizer.items():
+                if k != "adjust_for_ambient_noise_duration":
+                    setattr(r, k, v)
+            # TODO add countdown
+            r.adjust_for_ambient_noise(source, duration=chat.config.adjust_for_ambient_noise_duration)
+            while True:
+                print("listening now...")
+                try:
+                    audio = r.listen(source, timeout=5, phrase_time_limit=30)
+                    print("Recognizing...")
+                    # TODO: allow selection of which recognizer to use
+                    # TODO: live display of volume levels
+                    if chat.config.stt == "whisper_offline":
+                        text = r.recognize_whisper(
+                            audio,
+                            model="medium.en",
+                            show_dict=True,
+                        )["text"]
+                    elif chat.config.stt == "whisper_api":
+                        text = r.recognize_whisper_api(audio, api_key=chat.config.openai_api_key)
+                    else:
+                        raise NotImplementedError(chat.config.stt)
+                except Exception as e:
+                    unrecognized_speech_text = f"Sorry, I didn't catch that. Exception was: {e}s"
+                    text = unrecognized_speech_text
+                print(text)
 
-            response_text = chat.feed(text, agent_chain)
-            print(response_text)
+                chat.feed(text, agent_chain)
+    except KeyboardInterrupt:
+        sys.exit(0)
 
 
 def repl(chat, input_func=input):
@@ -204,7 +236,7 @@ def repl(chat, input_func=input):
 
 def main():
     config = parse_args(Config)
-    chat = chain.ChatSession(config)
+    chat = chain.ChatSession(config=config)
 
     if config.dry_run:
         agent_chain = chat.get_agent_chain()

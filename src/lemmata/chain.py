@@ -7,7 +7,7 @@ from typing import Literal, Optional, Tuple
 
 from gradio import Request
 import gradio_tools
-from langchain.agents import AgentType, Tool, ZeroShotAgent, create_csv_agent, load_tools
+from langchain.agents import AgentType, ZeroShotAgent, create_csv_agent, load_tools
 from langchain.agents.agent_toolkits import FileManagementToolkit, NLAToolkit
 from langchain.callbacks.streaming_stdout_final_only import FinalStreamingStdOutCallbackHandler
 from langchain.chains import ConversationChain
@@ -16,86 +16,116 @@ from langchain.chat_models.base import BaseChatModel
 from langchain.experimental.plan_and_execute import PlanAndExecute, load_agent_executor, load_chat_planner
 from langchain.memory import ConversationTokenBufferMemory
 from langchain.tools import AIPluginTool, BraveSearch, IFTTTWebhook
+from langchain.tools.base import BaseTool, Tool
 from langchain.tools.graphql.tool import BaseGraphQLTool
 from langchain.utilities.graphql import GraphQLAPIWrapper
+from pydantic import BaseModel, Field
 
 from lemmata.config import Config
 from lemmata.langchain.agent_executor import AgentExecutor
 from lemmata.langchain.human_callback import HumanApprovalCallbackHandler
 from lemmata.langchain.initialize_agent import initialize_agent
-from lemmata.tools import tools
+from lemmata.toolkits import duckduckgo_search, wikibase_sparql
 
 logger = logging.getLogger()
 
 
-# TODO turn into pydantic class
+def agent_to_tool(agent: AgentExecutor, name: str) -> BaseTool:
+    return Tool(
+        name=name,
+        func=lambda inp: agent.run(input=inp),
+        description="",
+        return_direct=False,
+    )
+
+
 # TODO handle_parsing_errors: Union[bool, str, Callable[[OutputParserException], str]] = False
 # TODO max_execution_time: Optional[float] = None
 # TODO max_iterations: Optional[int] = 15
-class ChatSession:
-    history: list[Tuple[str, str]]
-    feedback: list[dict]
+class ChatSession(BaseModel):
+    history: list[Tuple[str, str]] = Field(default_factory=list)
+    feedback: list[dict] = Field(default_factory=list)
     config: Config
+    scratchpad_dir: TemporaryDirectory[str] = Field(default_factory=TemporaryDirectory)
 
-    def __init__(self, config: Config, history: Optional[list[Tuple[str, str]]] = None):
-        self.history = history or []
-        self.feedback = []
-        self.config = config
-        self.scratchpad_dir = TemporaryDirectory()
+    class Config:
+        arbitrary_types_allowed = True
 
     def clear(self) -> None:
         self.history = []
         self.feedback = []
+        self.scratchpad_dir = TemporaryDirectory()
 
-    def get_tools(self, llm: BaseChatModel, callbacks: list) -> list:
-        all_tools = (
-            load_tools(
-                self.config.tools,
-                llm=llm,
-                callbacks=callbacks,
-            )
-            + tools
+    def get_tools(self, llm: BaseChatModel, callbacks: list) -> list[BaseTool]:
+        all_tools: list[BaseTool] = load_tools(
+            self.config.tools,
+            llm=llm,
+            callbacks=callbacks,
         )
+
+        try:
+            all_tools.extend(duckduckgo_search.DuckDuckGoToolkit().get_tools())
+        except ImportError as e:
+            logger.warning(e)
+
+        try:
+            all_tools.append(
+                agent_to_tool(
+                    wikibase_sparql.SparqlToolkit(
+                        wikidata_user_agent=self.config.get_api_key("wikidata_user_agent"),
+                    ).create_agent(
+                        llm=llm,
+                        callbacks=callbacks,
+                    ),
+                    name="Wikibase",
+                )
+            )
+        except ImportError as e:
+            logger.warning(e)
+
         # TODO: save files from session
         file_toolkit = FileManagementToolkit(
             root_dir=str(self.scratchpad_dir.name),
             selected_tools=["read_file", "write_file", "list_directory", "file_search"],
         )
         all_tools.extend(file_toolkit.get_tools())
+
         if brave_key := self.config.get_api_key("brave"):
             # TODO: configure count
             all_tools.append(BraveSearch.from_api_key(api_key=brave_key, search_kwargs={"count": 5}))
-        if not self.config.dry_run and False:
-            for t in getmembers(gradio_tools, isclass):
-                if t[0] not in ("GradioTool", "ImageCaptioningTool", "SAMImageSegmentationTool"):
-                    try:
-                        # TODO get rid of printing
-                        all_tools.append(t[1]().langchain)
-                    except Exception as e:
-                        logger.warning("Exception occured when loading, skipping", t[0], e)
+
+        for t in getmembers(gradio_tools, isclass):
+            if t[0] not in ("GradioTool", "ImageCaptioningTool", "SAMImageSegmentationTool"):
+                try:
+                    # TODO get rid of printing
+                    all_tools.append(t[1]().langchain)
+                except Exception as e:
+                    logger.warning("Exception occured when loading, skipping", t[0], e, exc_info=True)
+
         # TODO: add searching for webhooks
         if ifttt_key := self.config.get_api_key("ifttt"):
             for trigger in self.config.ifttt_webhooks:
+                # TODO: initialize from tool settings
                 all_tools.append(
-                    IFTTTWebhook(
-                        # name="Spotify",
-                        # description="Add a song to spotify playlist",
-                        url=f"https://maker.ifttt.com/trigger/{trigger}/json/with/key/{ifttt_key}"
-                    )
+                    IFTTTWebhook(name=trigger.title(), url=f"https://maker.ifttt.com/trigger/{trigger}/json/with/key/{ifttt_key}")
                 )
         elif len(self.config.ifttt_webhooks) != 0:
             logger.warning("IFTTT token is required to load webhooks, skipping")
+
         try:
             for url in self.config.graphql_endpoints:
                 wrapper = GraphQLAPIWrapper(graphql_endpoint=url)
                 all_tools.append(BaseGraphQLTool(graphql_wrapper=wrapper))
         except ImportError as e:
             logger.warning(e)
+
         for url in self.config.chatgpt_plugins:
             all_tools.append(AIPluginTool.from_plugin_url(f"{url}/.well-known/ai-plugin.json"))
+
         for url in self.config.openapi_specs:
             # TODO: create tool names that are compatible with OpenAI functions (no dash)
             all_tools.extend(NLAToolkit.from_llm_and_url(llm, url).get_tools())
+
         for fn in self.config.include:
             if str(fn).endswith(".csv"):
                 all_tools.append(
@@ -108,6 +138,7 @@ class ChatSession:
                 )
             else:
                 logger.warning(f"Not able to load {fn} yet, skipping")
+
         return all_tools
 
     def get_agent_chain(
@@ -146,10 +177,12 @@ class ChatSession:
             memory_key="chat_history",
         )
 
+        tools = self.get_tools(llm, callbacks)
         if self.config.agent in ("structured-react", "openai-functions"):
             if self.config.agent == "openai-functions" and not model.startswith("gpt-"):
                 raise ValueError(f"Cannot use `openai-functions` agent with {model} model")
-            tools = self.get_tools(llm, callbacks)
+            for t in tools:
+                assert isinstance(t, BaseTool), t
             return initialize_agent(
                 tools,
                 llm,

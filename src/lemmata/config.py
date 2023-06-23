@@ -16,6 +16,22 @@ Provider = Literal[
     "scenexplain",
     "ifttt",
     "gplaces",
+    "wikidata_user_agent",
+]
+
+STTEngine = Literal[
+    "cmu_sphinx_offline",
+    "gsr_api",
+    "gcloud_api",
+    "witai",
+    "azure",
+    "houndify_api",
+    "ibm",
+    "snowboy_hotword_offline",
+    "tensorflow",
+    "vosk_offline",
+    "whisper_offline",
+    "whisper_api",
 ]
 
 Agent = Literal["structured-react", "plan-and-execute", "openai-functions", "autogpt", "babyagi"]
@@ -47,6 +63,74 @@ class BaseConfig(BaseModel):
 
     class Config:
         arbitrary_types_allowed = True
+
+
+class RecognizerSettings(BaseModel):
+    """https://github.com/Uberi/speech_recognition/blob/master/reference/library-reference.rst#recognizer---recognizer"""
+
+    energy_threshold: float = Field(300, description="minimum audio energy to consider for recording")
+    dynamic_energy_threshold: bool = Field(
+        True,
+        description=(
+            "Represents whether the energy level threshold for sounds should be automatically adjusted"
+            "based on the currently ambient noise level while listening."
+            "Recommended for situations where the ambient noise level is unpredictable,"
+            "which seems to be the majority of use cases."
+            "If the ambient noise level is strictly controlled,"
+            "better results might be achieved by setting this to False to turn it off."
+        ),
+    )
+    dynamic_energy_adjustment_damping: float = Field(
+        0.15,
+        desciption=(
+            "If the dynamic energy threshold setting is enabled, approximately the fraction of the current energy threshold"
+            "that is retained after one second of dynamic threshold adjustment."
+            "Can be changed (not recommended)."
+            "Lower values allow for faster adjustment, but also make it more likely to miss certain phrases"
+            "(especially those with slowly changing volume)."
+            "As this value approaches 1, dynamic adjustment has less of an effect over time."
+            "When this value is 1, dynamic adjustment has no effect."
+        ),
+        min=0,
+        max=1,
+    )
+    dynamic_energy_ratio: float = Field(
+        1.5,
+        description=(
+            "If the dynamic energy threshold setting is enabled, the minimum factor by which speech is louder than ambient noise."
+            "Can be changed (not recommended)."
+            "For example, the default value of 1.5 means that speech is at least 1.5 times louder than ambient noise."
+            "Smaller values result in more false positives (but fewer false negatives)"
+            "when ambient noise is loud compared to speech."
+        ),
+    )
+    pause_threshold: float = Field(0.8, description="seconds of non-speaking audio before a phrase is considered complete")
+    operation_timeout: Optional[float] = Field(
+        None,
+        description=(
+            "seconds after an internal operation (e.g., an API request) starts before it times out, or ``None`` for no timeout",
+        ),
+    )
+
+    phrase_threshold: float = Field(
+        0.3,
+        description="minimum seconds of speaking audio before we consider the speaking audio a phrase"
+        "- values below this are ignored (for filtering out clicks and pops)",
+    )
+    non_speaking_duration: float = Field(0.5, description="seconds of non-speaking audio to keep on both sides of the recording")
+
+    adjust_for_ambient_noise_duration: float = Field(
+        1,
+        description=(
+            "seconds to wait while dynamically adjusting the energy threshold to account for ambient noise prior to listening,"
+            "should be at least 0.5 in order to get a representative sample of the ambient noise"
+        ),
+    )
+
+
+class ToolSettings(BaseModel):
+    name: Optional[str]
+    description: Optional[str]
 
 
 # max_tokens "The maximum number of tokens to generate in the chat completion.
@@ -105,12 +189,12 @@ class Config(BaseConfig):
     # system: str
     personality: Optional[str]
 
-    tools: list[str] = Field(description="Names of tools to enable", default_factory=list)
+    tools: list[Union[str, ToolSettings]] = Field(description="Names of tools to enable", default_factory=list)
     api_key: list[Tuple[Provider, str]] = Field(letter="k")
-    ifttt_webhooks: list[str] = Field(default_factory=list)
-    graphql_endpoints: list[AnyHttpUrl] = Field(default_factory=list)
-    chatgpt_plugins: list[AnyHttpUrl] = Field(default_factory=list)
-    openapi_specs: list[AnyHttpUrl] = Field(default_factory=list)
+    ifttt_webhooks: list[Union[str, ToolSettings]] = Field(default_factory=list)
+    graphql_endpoints: list[Union[AnyHttpUrl, ToolSettings]] = Field(default_factory=list)
+    chatgpt_plugins: list[Union[AnyHttpUrl, ToolSettings]] = Field(default_factory=list)
+    openapi_specs: list[Union[AnyHttpUrl, ToolSettings]] = Field(default_factory=list)
     include: list[Union[Path, AnyHttpUrl]] = Field(default_factory=list)
 
     prompt: Optional[str] = Field(arg=0)
@@ -120,7 +204,10 @@ class Config(BaseConfig):
     cache: bool = Field(description="Whether to cache the responses of the LLM")
     dry_run: bool
     tts: bool = Field(description="Speaks the responses using the say command")
-    stt: bool = Field(description="Runs a listen loop that listens to the microphone and transcribes it via sphinx")
+    stt: Optional[STTEngine] = Field(
+        description="Runs a listen loop that listens to the microphone and transcribes it via sphinx"
+    )
+    recognizer: RecognizerSettings = Field(default_factory=RecognizerSettings)
 
     def get_api_key(self, service: Provider) -> Optional[str]:
         for p, k in self.api_key:
